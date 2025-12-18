@@ -1,0 +1,5 @@
+{
+  "name": "Habbo BBB Controller",
+  "description": "Um painel de controle completo para gerenciar suas edições de reality show no Habbo, com registro de provas, paredões e discursos finais gerados por IA.",
+  "requestFramePermissions": []
+}
