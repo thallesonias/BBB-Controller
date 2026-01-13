@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Player, RoundLog, Nominee, OtherVote } from '../types';
 import { Button } from './Button';
-import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2, PlayCircle, BookOpen } from 'lucide-react';
+import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2, PlayCircle, BookOpen, Target } from 'lucide-react';
 
 interface RoundManagerProps {
   roundNumber: number;
@@ -106,6 +106,7 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
   const [clickCoords, setClickCoords] = useState({ x: 500, y: 500 });
   const [showCoordsSettings, setShowCoordsSettings] = useState(false);
   const [isAutomating, setIsAutomating] = useState(false);
+  const [captureCountdown, setCaptureCountdown] = useState<number | null>(null);
 
   // Suggestions State
   const [suggestions, setSuggestions] = useState<GameData[]>([]);
@@ -132,6 +133,32 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
   const saveCoords = (newCoords: {x: number, y: number}) => {
     setClickCoords(newCoords);
     localStorage.setItem('habbo_bbb_click_coords', JSON.stringify(newCoords));
+  };
+
+  const handleCaptureCoords = async () => {
+    setCaptureCountdown(3);
+    const interval = setInterval(() => {
+      setCaptureCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    try {
+      const response = await fetch('http://localhost:5000/capture-position', { method: 'POST' });
+      const data = await response.json();
+      
+      clearInterval(interval);
+      setCaptureCountdown(null);
+
+      if (data.status === 'success') {
+        saveCoords({ x: data.x, y: data.y });
+        // Beep or visual feedback
+      } else {
+        alert("Erro na captura: " + data.message);
+      }
+    } catch (e) {
+      clearInterval(interval);
+      setCaptureCountdown(null);
+      alert("Erro ao conectar com servidor Python");
+    }
   };
 
   // Helpers
@@ -773,27 +800,51 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
 
                  {/* COORDS SETTINGS PANEL */}
                  {showCoordsSettings && (
-                    <div className="mb-2 p-2 bg-slate-950/80 rounded border border-indigo-500/30 flex items-center gap-2 text-xs animate-slide-up">
-                       <Crosshair className="w-3 h-3 text-indigo-400" />
-                       <div className="flex items-center gap-1">
-                         <span>X:</span>
-                         <input 
-                           type="number" 
-                           value={clickCoords.x} 
-                           onChange={(e) => saveCoords({...clickCoords, x: Number(e.target.value)})}
-                           className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center outline-none focus:border-indigo-500" 
-                         />
+                    <div className="mb-2 p-2 bg-slate-950/80 rounded border border-indigo-500/30 flex flex-col gap-2 animate-slide-up">
+                       <div className="flex items-center gap-2 text-xs">
+                           <Crosshair className="w-3 h-3 text-indigo-400" />
+                           <div className="flex items-center gap-1">
+                             <span>X:</span>
+                             <input 
+                               type="number" 
+                               value={clickCoords.x} 
+                               onChange={(e) => saveCoords({...clickCoords, x: Number(e.target.value)})}
+                               className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center outline-none focus:border-indigo-500" 
+                             />
+                           </div>
+                           <div className="flex items-center gap-1">
+                             <span>Y:</span>
+                             <input 
+                               type="number" 
+                               value={clickCoords.y} 
+                               onChange={(e) => saveCoords({...clickCoords, y: Number(e.target.value)})}
+                               className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center outline-none focus:border-indigo-500" 
+                             />
+                           </div>
                        </div>
-                       <div className="flex items-center gap-1">
-                         <span>Y:</span>
-                         <input 
-                           type="number" 
-                           value={clickCoords.y} 
-                           onChange={(e) => saveCoords({...clickCoords, y: Number(e.target.value)})}
-                           className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center outline-none focus:border-indigo-500" 
-                         />
-                       </div>
-                       <span className="text-[9px] text-slate-500 ml-auto">Foca e Clica</span>
+                       
+                       {/* AUTO CAPTURE BUTTON */}
+                       <button
+                         onClick={handleCaptureCoords}
+                         disabled={captureCountdown !== null}
+                         className={`w-full py-1.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all
+                           ${captureCountdown !== null 
+                             ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50' 
+                             : 'bg-indigo-600 text-white hover:bg-indigo-500'}
+                         `}
+                       >
+                         {captureCountdown !== null ? (
+                           <>
+                             <Clock className="w-3 h-3 animate-pulse" />
+                             {captureCountdown}s... Mova o mouse!
+                           </>
+                         ) : (
+                           <>
+                             <Target className="w-3 h-3" />
+                             Capturar (3s)
+                           </>
+                         )}
+                       </button>
                     </div>
                  )}
                  
