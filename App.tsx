@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { GameState, GamePhase, Player, RoundLog } from './types';
@@ -6,7 +7,7 @@ import { RoundManager } from './components/RoundManager';
 import { HistorySidebar } from './components/HistorySidebar';
 import { FinalScreen } from './components/FinalScreen';
 import { StatsModal } from './components/StatsModal';
-import { UserCog, X, LayoutDashboard, BarChart2, UserPlus, Clock, PictureInPicture2, Maximize2, MonitorSmartphone, Skull } from 'lucide-react';
+import { UserCog, X, LayoutDashboard, BarChart2, UserPlus, Clock, PictureInPicture2, Maximize2, MonitorSmartphone, Skull, Volume2, VolumeX } from 'lucide-react';
 import { Button } from './components/Button';
 
 // Ambient Background Component
@@ -31,6 +32,10 @@ export default function App() {
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [elapsedTimeStr, setElapsedTimeStr] = useState('00:00:00');
   
+  // Mute State
+  const [isMuted, setIsMuted] = useState(false);
+  const [isMuting, setIsMuting] = useState(false);
+
   // Compact Mode State (Mini Mode)
   const [isCompact, setIsCompact] = useState(false);
 
@@ -80,6 +85,25 @@ export default function App() {
       (window as any).electronAPI.toggleCompact(newCompactState);
     } else {
       console.log("Electron API not found. Switching UI mode only.");
+    }
+  };
+
+  const toggleRoomMute = async () => {
+    if (isMuting) return;
+    setIsMuting(true);
+    
+    try {
+        const response = await fetch('http://localhost:5000/toggle-mute', { method: 'POST' });
+        if (response.ok) {
+            setIsMuted(!isMuted);
+        } else {
+            alert("Erro ao comunicar com o servidor de automação.");
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Erro: Verifique se o automation_server.py está rodando.");
+    } finally {
+        setIsMuting(false);
     }
   };
 
@@ -194,6 +218,7 @@ export default function App() {
       targetDuration: 60
     });
     setIsCompact(false);
+    setIsMuted(false);
   };
 
   const activePlayers = gameState.players.filter(p => p.status === 'ACTIVE');
@@ -226,17 +251,43 @@ export default function App() {
                     {gameState.currentRound}
                 </div>
                 {elapsedTimeStr}
+                {/* Mute Button Compact */}
+                <button 
+                   onClick={toggleRoomMute}
+                   disabled={isMuting}
+                   className={`p-1 rounded ${isMuted ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-400'}`}
+                   title="Mutar/Desmutar Quarto"
+                >
+                    {isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                </button>
              </div>
           )}
           
           {gameState.phase !== GamePhase.SETUP && (
             <div className="flex items-center gap-2 text-sm font-medium animate-fade-in ml-auto">
                
-               {/* Timer Display (Desktop only, or hidden in compact if shown on left) */}
+               {/* Timer & Mute Display (Desktop only) */}
                {!isCompact && (
-                 <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-slate-300 font-mono tracking-wider mr-2">
-                   <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                   {elapsedTimeStr}
+                 <div className="hidden md:flex items-center mr-2">
+                    {/* Timer */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-l-lg bg-slate-800/50 border border-white/10 text-slate-300 font-mono tracking-wider">
+                      <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                      {elapsedTimeStr}
+                    </div>
+                    {/* Mute Button */}
+                    <button 
+                        onClick={toggleRoomMute}
+                        disabled={isMuting}
+                        className={`flex items-center justify-center px-3 py-1.5 rounded-r-lg border border-l-0 border-white/10 transition-colors ${
+                            isMuting ? 'bg-slate-800/50 cursor-wait opacity-50' : 
+                            isMuted 
+                                ? 'bg-red-900/20 text-red-400 hover:bg-red-900/40' 
+                                : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700'
+                        }`}
+                        title={isMuted ? "Desmutar Quarto" : "Mutar Quarto"}
+                    >
+                        {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                    </button>
                  </div>
                )}
 
