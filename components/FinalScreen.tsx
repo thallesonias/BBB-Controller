@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Player, RoundLog } from '../types';
 import { generateFinalSpeech } from '../services/geminiService';
 import { Button } from './Button';
-import { Sparkles, RefreshCw, Copy, Trophy, Star } from 'lucide-react';
+import { Sparkles, RefreshCw, Copy, Trophy, Star, Download, LogOut } from 'lucide-react';
 
 interface FinalScreenProps {
   finalists: Player[];
@@ -24,8 +24,70 @@ export const FinalScreen: React.FC<FinalScreenProps> = ({ finalists, allPlayers,
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(speech);
-    // Simple alert replacement or toast could go here
     alert("Discurso copiado!");
+  };
+
+  const handleEndSeasonAndSave = () => {
+    // 1. Compile Current Season Data
+    const winner = finalists.find(f => f.status === 'WINNER') || finalists[0]; // Assuming active players at end are winners/finalists
+    
+    const currentSeasonData = {
+      seasonId: Date.now(),
+      date: new Date().toLocaleString('pt-BR'),
+      winner: winner.name,
+      finalists: finalists.map(f => f.name),
+      totalRounds: history.length,
+      players: allPlayers.map(p => ({
+        name: p.name,
+        status: p.status,
+        stats: {
+           leaderships: history.filter(r => r.leaderIds.includes(p.id)).length,
+           walls: history.filter(r => r.nominees.some(n => n.playerId === p.id)).length
+        }
+      })),
+      roundHistory: history
+    };
+
+    // 2. Load Existing History & Append
+    const storageKey = 'habbo_bbb_full_history';
+    let fullHistory = [];
+    try {
+      const existing = localStorage.getItem(storageKey);
+      if (existing) {
+        fullHistory = JSON.parse(existing);
+      }
+    } catch (e) {
+      console.error("Error reading history", e);
+    }
+    
+    fullHistory.push(currentSeasonData);
+    localStorage.setItem(storageKey, JSON.stringify(fullHistory));
+
+    // 3. Update Known Players (for autofill)
+    const playersKey = 'habbo_bbb_known_players';
+    let knownPlayers: string[] = [];
+    try {
+      const existingPlayers = localStorage.getItem(playersKey);
+      if (existingPlayers) {
+        knownPlayers = JSON.parse(existingPlayers);
+      }
+    } catch (e) { console.error(e); }
+
+    const newPlayerNames = allPlayers.map(p => p.name);
+    const updatedKnownPlayers = Array.from(new Set([...knownPlayers, ...newPlayerNames])).sort();
+    localStorage.setItem(playersKey, JSON.stringify(updatedKnownPlayers));
+
+    // 4. Trigger Download
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullHistory, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `habbo_bbb_historico_geral.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+
+    // 5. Restart
+    onRestart();
   };
 
   return (
@@ -116,9 +178,12 @@ export const FinalScreen: React.FC<FinalScreenProps> = ({ finalists, allPlayers,
         )}
       </div>
 
-      <div className="flex justify-center pt-12 pb-8">
+      <div className="flex justify-center pt-8 pb-8 gap-4">
         <Button onClick={onRestart} variant="ghost" className="text-slate-500 hover:text-white hover:bg-white/5">
-          <RefreshCw className="w-4 h-4" /> Iniciar Nova Temporada
+          <RefreshCw className="w-4 h-4" /> Apenas Reiniciar
+        </Button>
+        <Button onClick={handleEndSeasonAndSave} variant="success" className="shadow-lg shadow-emerald-500/20">
+          <Download className="w-4 h-4" /> Encerrar Edição & Baixar Histórico
         </Button>
       </div>
     </div>

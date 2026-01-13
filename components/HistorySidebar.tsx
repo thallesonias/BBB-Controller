@@ -54,12 +54,16 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({ rounds, players 
                 </div>
                 
                 <div className="space-y-1.5 text-xs">
-                  {round.leaderId && (
-                     <div className="flex items-center gap-2 text-yellow-500/80">
-                       <Crown className="w-3 h-3" />
-                       <div className="flex items-center gap-1">
-                         {getPlayerAvatar(round.leaderId) && <img src={getPlayerAvatar(round.leaderId)} className="w-4 h-4 rounded-full bg-slate-800 object-cover scale-150" alt="" />}
-                         <span>Líder: {getPlayerName(round.leaderId)}</span>
+                  {round.leaderIds && round.leaderIds.length > 0 && (
+                     <div className="flex items-start gap-2 text-yellow-500/80">
+                       <Crown className="w-3 h-3 mt-0.5" />
+                       <div className="flex flex-col gap-0.5">
+                         {round.leaderIds.map(id => (
+                           <div key={id} className="flex items-center gap-1">
+                             {getPlayerAvatar(id) && <img src={getPlayerAvatar(id)} className="w-4 h-4 rounded-full bg-slate-800 object-cover scale-150" alt="" />}
+                             <span>{getPlayerName(id)}</span>
+                           </div>
+                         ))}
                        </div>
                      </div>
                   )}

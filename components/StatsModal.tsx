@@ -12,7 +12,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, players, rounds
   
   // Calculate Stats
   const stats = players.map(player => {
-    const leaderships = rounds.filter(r => r.leaderId === player.id).length;
+    // Check if player's ID is in the leaderIds array for each round
+    const leaderships = rounds.filter(r => r.leaderIds && r.leaderIds.includes(player.id)).length;
+    
     const walled = rounds.filter(r => r.nominees.some(n => n.playerId === player.id)).length;
     const eliminated = player.status === 'ELIMINATED';
     const survived = walled - (eliminated ? 1 : 0);
@@ -123,7 +125,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, players, rounds
                 <thead>
                   <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
                     <th className="p-3">Semana</th>
-                    <th className="p-3">Líder</th>
+                    <th className="p-3">Líderes</th>
                     <th className="p-3">Prova</th>
                     <th className="p-3">Paredão</th>
                     <th className="p-3">Eliminado</th>
@@ -134,12 +136,12 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, players, rounds
                     <tr key={round.roundNumber} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                       <td className="p-3 font-mono text-indigo-300">#{round.roundNumber}</td>
                       <td className="p-3">
-                         {round.leaderId && (
-                           <div className="flex items-center gap-2">
-                             <img src={getPlayerAvatar(round.leaderId) || ''} className="w-6 h-6 rounded-full bg-slate-800 object-cover scale-150" alt=""/>
-                             <span className="text-yellow-400">{getPlayerName(round.leaderId)}</span>
+                         {round.leaderIds && round.leaderIds.map(lid => (
+                           <div key={lid} className="flex items-center gap-2 mb-1">
+                             <img src={getPlayerAvatar(lid) || ''} className="w-6 h-6 rounded-full bg-slate-800 object-cover scale-150" alt=""/>
+                             <span className="text-yellow-400">{getPlayerName(lid)}</span>
                            </div>
-                         )}
+                         ))}
                       </td>
                       <td className="p-3 text-slate-300">{round.challengeName}</td>
                       <td className="p-3">

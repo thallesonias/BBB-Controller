@@ -1,92 +1,265 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { Player, RoundLog, Nominee, OtherVote } from '../types';
 import { Button } from './Button';
-import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus } from 'lucide-react';
+import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2 } from 'lucide-react';
 
 interface RoundManagerProps {
   roundNumber: number;
   players: Player[];
   onFinishRound: (log: RoundLog) => void;
   onEndGame: () => void;
+  isCompact?: boolean;
+  history: RoundLog[];
+  startTime: number;
+  targetDuration: number; // in minutes
 }
 
-// Reusing list logic
-const CHALLENGE_LIST = [
-  { id: 0, name: "Nenhuma Prova" },
-  { id: 1, name: "Fuja" },
-  { id: 2, name: "Cruzamento" },
-  { id: 3, name: "Fujamento" },
-  { id: 4, name: "Fuja 2.0" },
-  { id: 5, name: "Massacre" },
-  { id: 6, name: "Fujoller" },
-  { id: 7, name: "Banzai" },
-  { id: 8, name: "Descubra a Senha" },
-  { id: 9, name: "Chão é Lava" },
-  { id: 10, name: "Balão" },
-  { id: 11, name: "Batata Quente" },
-  { id: 12, name: "Prova dos Clicks" },
-  { id: 13, name: "Coller" },
-  { id: 14, name: "Todos x Todos" },
-  { id: 15, name: "Verdadeiro ou Falso" },
-  { id: 16, name: "Defenda o seu Pufe" },
-  { id: 17, name: "Danger" },
-  { id: 18, name: "Dodge Ball" },
-  { id: 19, name: "Tiro ao Alvo" },
-  { id: 20, name: "Ilhados" },
-  { id: 21, name: "Pegue a Lebre" },
-  { id: 22, name: "Elefante Colorido" },
-  { id: 23, name: "Velocidade é Tudo" },
-  { id: 24, name: "Ir até Cor" },
-  { id: 25, name: "Subir nas Portas" },
-  { id: 26, name: "Fuja em Duplas" },
-  { id: 27, name: "Queimada" },
-  { id: 28, name: "Pegue o Drink" },
-  { id: 29, name: "Nervosos" },
-  { id: 30, name: "Sobrevivência" },
-  { id: 31, name: "Cabo de Guerra" },
-  { id: 32, name: "Resta 1" },
-  { id: 33, name: "Céu ou Inferno" },
-  { id: 34, name: "Divertidamente" }
-];
+// Full Game Database from CSV (Strictly matched to provided CSV)
+interface GameData {
+  id: number;
+  name: string;
+  type: string;
+  min: number; // 0 if '-'
+  max: number; // 999 if 'Livre'
+  duration: string;
+  obs: string;
+  score?: number; // Internal use for sorting
+}
+
+const GAME_DATABASE: GameData[] = [
+  { id: 1, name: "A Escolha", type: "Social / Sorte", min: 8, max: 18, duration: "2 - 3 min", obs: "" },
+  { id: 2, name: "Balão", type: "Sorte", min: 8, max: 999, duration: "1,5 min", obs: "" },
+  { id: 3, name: "Banzai", type: "Sorte", min: 0, max: 999, duration: "30s - 1 min", obs: "" },
+  { id: 4, name: "Batata Quente", type: "Habilidade", min: 7, max: 999, duration: "Variável", obs: "Elimina 1 a cada 30s" },
+  { id: 5, name: "Cabo de Guerra", type: "Habilidade", min: 6, max: 999, duration: "30s", obs: "Por dupla ou indivíduo" },
+  { id: 6, name: "Caixas", type: "Habilidade", min: 5, max: 11, duration: "30s", obs: "" },
+  { id: 7, name: "Céu ou Inferno", type: "Sorte", min: 6, max: 999, duration: "1 - 2 min", obs: "" },
+  { id: 8, name: "Chão é Lava", type: "Sorte", min: 8, max: 999, duration: "3 - 5 min", obs: "" },
+  { id: 9, name: "Cliques", type: "Habilidade", min: 5, max: 7, duration: "1,5 min", obs: "" },
+  { id: 10, name: "Cruzamento", type: "Habilidade", min: 6, max: 999, duration: "3 min", obs: "Bom p/ muita gente" },
+  { id: 11, name: "Danger", type: "Habilidade", min: 0, max: 999, duration: "3,5 min", obs: "" },
+  { id: 12, name: "Defenda o seu pufe", type: "Sorte", min: 6, max: 10, duration: "3 min", obs: "" },
+  { id: 13, name: "Descubra a Senha", type: "Sorte / Conhec.", min: 8, max: 999, duration: "2 - 3 min", obs: "" },
+  { id: 14, name: "Divertidamente", type: "Habilidade", min: 9, max: 999, duration: "5 min", obs: "Bom p/ muita gente" },
+  { id: 15, name: "Dodge Ball", type: "Habilidade", min: 4, max: 8, duration: "3 - 4 min", obs: "" },
+  { id: 16, name: "Elefante Colorido", type: "Sorte", min: 0, max: 4, duration: "4 - 5 min", obs: "" },
+  { id: 17, name: "Elefante Colorido (Esferas)", type: "Habilidade", min: 7, max: 999, duration: "3 - 4 min", obs: "Bom p/ muita gente" },
+  { id: 18, name: "Fuja", type: "Habilidade", min: 0, max: 999, duration: "3 min", obs: "Bom p/ muita gente" },
+  { id: 19, name: "Fuja das Cores", type: "Habilidade", min: 5, max: 6, duration: "5 min", obs: "" },
+  { id: 20, name: "Fuja em Duplas", type: "Habilidade", min: 8, max: 8, duration: "4 - 5 min", obs: "Apenas 8 pessoas" },
+  { id: 21, name: "Fujamento", type: "Habilidade", min: 6, max: 999, duration: "4 min", obs: "Bom p/ muita gente" },
+  { id: 22, name: "Fujoller", type: "Habilidade", min: 5, max: 14, duration: "1,5 min", obs: "" },
+  { id: 23, name: "Ilhados", type: "Sorte", min: 5, max: 8, duration: "2,5 - 3,5 min", obs: "" },
+  { id: 24, name: "Ir até cor", type: "Sorte", min: 10, max: 999, duration: "2 - 3 min", obs: "" },
+  { id: 25, name: "Leilão", type: "Habilidade / Sorte", min: 7, max: 11, duration: "2 - 3 min", obs: "" },
+  { id: 26, name: "Massacre", type: "Habilidade", min: 0, max: 999, duration: "2,5 min", obs: "Bom p/ muita gente" },
+  { id: 27, name: "Nervosos", type: "Habilidade / Social", min: 8, max: 999, duration: "2,5 - 3,5 min", obs: "" },
+  { id: 28, name: "Pacman", type: "-", min: 6, max: 8, duration: "4 - 5 min", obs: "Sempre nº par" },
+  { id: 29, name: "Pegue a Lebre", type: "Habilidade", min: 7, max: 999, duration: "Variável", obs: "Elimina 1 a cada 30s" },
+  { id: 30, name: "Pegue o Drink", type: "Habilidade", min: 6, max: 999, duration: "4 min", obs: "Bom p/ muita gente" },
+  { id: 31, name: "Queimada", type: "Habilidade", min: 8, max: 999, duration: "3 - 4 min", obs: "" },
+  { id: 32, name: "Resta 1", type: "Habilidade", min: 4, max: 999, duration: "2,5 - 3,5 min", obs: "" },
+  { id: 33, name: "Sobrevivência", type: "Habilidade", min: 7, max: 999, duration: "1 min", obs: "" },
+  { id: 34, name: "Subir nas Portas", type: "Habilidade", min: 8, max: 16, duration: "1 - 2 min", obs: "Sempre nº par" },
+  { id: 35, name: "Tiro ao Alvo", type: "Sorte", min: 8, max: 999, duration: "1 - 2 min", obs: "" },
+  { id: 36, name: "Velocidade é Tudo", type: "Habilidade / Social", min: 8, max: 999, duration: "3,5 - 4,5 min", obs: "" },
+  { id: 37, name: "Verdadeiro ou Falso", type: "Conhecimento", min: 10, max: 999, duration: "5 - 6 min", obs: "" },
+  { id: 0, name: "Nenhuma Prova", type: "-", min: 0, max: 999, duration: "-", obs: "Apenas votação" },
+].sort((a, b) => a.name.localeCompare(b.name));
 
 export const RoundManager: React.FC<RoundManagerProps> = ({ 
   roundNumber, 
   players, 
   onFinishRound,
-  onEndGame
+  onEndGame,
+  isCompact = false,
+  history,
+  startTime,
+  targetDuration
 }) => {
-  const activePlayers = useMemo(() => players.filter(p => p.status === 'ACTIVE'), [players]);
+  // Sort alphabeticaly: symbols/numbers first, then letters.
+  const activePlayers = useMemo(() => {
+    return players
+      .filter(p => p.status === 'ACTIVE')
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [players]);
   
   // Form State
   const [challengeName, setChallengeName] = useState('');
-  const [leaderId, setLeaderId] = useState<string>('');
+  // Multiple Leaders State
+  const [leaderIds, setLeaderIds] = useState<string[]>([]);
   const [vetoedIds, setVetoedIds] = useState<string[]>([]);
   const [immuneIds, setImmuneIds] = useState<string[]>([]);
   const [nominees, setNominees] = useState<Nominee[]>([]);
   
-  // Nominee Form State
+  // Nominee Form State - Default: Indicação do Líder
   const [currentNomineeId, setCurrentNomineeId] = useState('');
-  const [currentNomineeReason, setCurrentNomineeReason] = useState('Voto da Casa');
+  const [currentNomineeReason, setCurrentNomineeReason] = useState('Indicação do Líder');
   const [currentVoteCount, setCurrentVoteCount] = useState<number | ''>('');
-  const [currentNominatedBy, setCurrentNominatedBy] = useState<string>(''); // For Counter-coup
+  const [currentNominatedBy, setCurrentNominatedBy] = useState<string>('');
   const [isReverseVote, setIsReverseVote] = useState(false);
   const [isOpenVote, setIsOpenVote] = useState(false);
 
+  // Automation Settings State
+  const [clickCoords, setClickCoords] = useState({ x: 500, y: 500 });
+  const [showCoordsSettings, setShowCoordsSettings] = useState(false);
+
+  // Suggestions State
+  const [suggestions, setSuggestions] = useState<GameData[]>([]);
+
+  // Compact Mode Specific State
+  const [compactVoteTarget, setCompactVoteTarget] = useState('');
+
   // Other Votes State
   const [otherVotes, setOtherVotes] = useState<OtherVote[]>([]);
-  const [otherVotePlayerId, setOtherVotePlayerId] = useState('');
-  const [otherVoteCount, setOtherVoteCount] = useState<number | ''>('');
-
   const [eliminatedIds, setEliminatedIds] = useState<string[]>([]);
 
+  // Load Coords on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('habbo_bbb_click_coords');
+    if (saved) {
+      try {
+        setClickCoords(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  const saveCoords = (newCoords: {x: number, y: number}) => {
+    setClickCoords(newCoords);
+    localStorage.setItem('habbo_bbb_click_coords', JSON.stringify(newCoords));
+  };
+
   // Helpers
-  const isLeader = (id: string) => id === leaderId;
+  const isLeader = (id: string) => leaderIds.includes(id);
   const isImmune = (id: string) => immuneIds.includes(id);
   const isVetoed = (id: string) => vetoedIds.includes(id);
   const isNominated = (id: string) => nominees.some(n => n.playerId === id);
   const isEliminated = (id: string) => eliminatedIds.includes(id);
 
   const getPlayerName = (id: string) => players.find(p => p.id === id)?.name || '';
+  const getChallengeUsageCount = (name: string) => history.filter(h => h.challengeName === name).length;
+
+  // Usage count for current selection
+  const currentChallengeCount = useMemo(() => getChallengeUsageCount(challengeName), [challengeName, history]);
+
+  // Selected Challenge Details
+  const selectedChallengeData = useMemo(() => GAME_DATABASE.find(g => g.name === challengeName), [challengeName]);
+
+  const toggleLeader = (id: string) => {
+    setLeaderIds(prev => {
+      // If adding leader, remove from immune/veto just to be clean, though logic handles it
+      if (prev.includes(id)) return prev.filter(l => l !== id);
+      return [...prev, id];
+    });
+    // Remove from Immune list if they become leader (redundant but safe)
+    setImmuneIds(prev => prev.filter(i => i !== id));
+  };
+
+  // Duration Parsing Helper
+  const parseDuration = (durationStr: string): number => {
+    if (!durationStr || durationStr === '-' || durationStr === 'Variável') return 4; // Default average
+    
+    // Convert comma to dot
+    let clean = durationStr.replace(',', '.').toLowerCase();
+    
+    if (clean.includes('30s')) return 0.5;
+    
+    // Extract numbers
+    const matches = clean.match(/[\d\.]+/g);
+    if (!matches) return 5;
+    
+    if (matches.length === 2) {
+      // Range: "2 - 3 min" -> 2.5
+      return (parseFloat(matches[0]) + parseFloat(matches[1])) / 2;
+    }
+    return parseFloat(matches[0]);
+  };
+
+  // Generate Suggestions
+  useEffect(() => {
+    if (activePlayers.length > 0) {
+      refreshSuggestions();
+    }
+  }, [activePlayers.length, history.length, startTime, targetDuration]); 
+
+  const refreshSuggestions = () => {
+    const count = activePlayers.length;
+    const now = Date.now();
+    const elapsedTimeMinutes = (now - startTime) / 1000 / 60;
+    const remainingTime = Math.max(0, targetDuration - elapsedTimeMinutes);
+
+    // 1. Valid Games Filter (Player Count)
+    const validGames = GAME_DATABASE.filter(game => {
+       if (game.name === "Nenhuma Prova") return false;
+       return count >= game.min && (game.max === 999 || count <= game.max);
+    });
+
+    // 2. Score Games (Focus on Usage + Time, Type handled separately)
+    const scoredGames = validGames.map(game => {
+       let score = 0;
+       const avgDuration = parseDuration(game.duration);
+       
+       // Major Penalty for usage (force variety)
+       const usage = getChallengeUsageCount(game.name);
+       score -= (usage * 1000);
+
+       // Time Adaptation
+       if (remainingTime < 15) {
+          if (avgDuration > 5) score -= 500; 
+          if (avgDuration <= 3) score += 50;
+       }
+
+       // Randomness for rotation
+       score += Math.random() * 10;
+       
+       return { ...game, score };
+    });
+
+    // 3. Bucket Sort: Skill, Luck, Others
+    const skillGames = scoredGames.filter(g => g.type.toLowerCase().includes('habilidade'));
+    const luckGames = scoredGames.filter(g => g.type.toLowerCase().includes('sorte') && !g.type.toLowerCase().includes('habilidade'));
+    const otherGames = scoredGames.filter(g => !g.type.toLowerCase().includes('habilidade') && !g.type.toLowerCase().includes('sorte'));
+    // Include mixed games in 'others' bucket fallback if needed or create specific buckets
+
+    // Sort buckets
+    const byScore = (a: GameData, b: GameData) => (b.score || 0) - (a.score || 0);
+    skillGames.sort(byScore);
+    luckGames.sort(byScore);
+    otherGames.sort(byScore);
+
+    // 4. Selection: 1 Skill, 1 Luck, 1 Other/Mixed
+    const finalSuggestions: GameData[] = [];
+
+    // Add best Skill
+    if (skillGames.length > 0) finalSuggestions.push(skillGames[0]);
+    
+    // Add best Luck
+    if (luckGames.length > 0) finalSuggestions.push(luckGames[0]);
+
+    // Add best Other (or 2nd best Skill/Luck if no Other available)
+    if (otherGames.length > 0) {
+        finalSuggestions.push(otherGames[0]);
+    } else if (skillGames.length > 1) {
+        finalSuggestions.push(skillGames[1]);
+    } else if (luckGames.length > 1) {
+        finalSuggestions.push(luckGames[1]);
+    }
+
+    setSuggestions(finalSuggestions);
+  };
+
+  // Centralized Workflow Logic
+  const getNextWorkflowStep = (currentReason: string, justAddedId: string) => {
+    if (currentReason === 'Indicação do Líder') return { reason: 'Contra-golpe', nominatedBy: justAddedId };
+    if (currentReason === 'Contra-golpe') return { reason: 'Voto da Casa', nominatedBy: '' };
+    if (currentReason === 'Voto da Casa') return { reason: 'Sorteio', nominatedBy: '' };
+    if (currentReason === 'Voto da Casa (Desempate)') return { reason: 'Sorteio', nominatedBy: '' };
+    if (currentReason === 'Perdeu na Prova') return { reason: 'Sorteio', nominatedBy: '' };
+    return { reason: currentReason, nominatedBy: '' };
+  };
 
   const handleAddNominee = () => {
     if (currentNomineeId && !isNominated(currentNomineeId)) {
@@ -110,34 +283,132 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
       // Remove from other votes if they were added there previously
       setOtherVotes(prev => prev.filter(ov => ov.playerId !== currentNomineeId));
 
-      // Reset fields
+      // --- SMART WORKFLOW UPDATE ---
+      const { reason, nominatedBy } = getNextWorkflowStep(currentNomineeReason, currentNomineeId);
+
+      // Reset fields with new smart values
       setCurrentNomineeId('');
-      setCurrentNomineeReason('Voto da Casa');
+      setCurrentNomineeReason(reason);
+      setCurrentNominatedBy(nominatedBy);
       setCurrentVoteCount('');
-      setCurrentNominatedBy('');
       setIsReverseVote(false);
       setIsOpenVote(false);
     }
   };
 
-  const handleAddOtherVote = () => {
-    if (otherVotePlayerId && otherVoteCount !== '' && Number(otherVoteCount) > 0) {
-      if (isNominated(otherVotePlayerId)) {
-        alert("Este jogador já está no paredão. Edite o paredão se quiser mudar os votos dele.");
-        return;
-      }
+  const updateOtherVote = (playerId: string, delta: number) => {
+    setOtherVotes(prev => {
+      const existing = prev.find(ov => ov.playerId === playerId);
+      const currentCount = existing ? existing.count : 0;
+      const newCount = Math.max(0, currentCount + delta);
+      
+      if (newCount === 0) return prev.filter(ov => ov.playerId !== playerId);
+      if (existing) return prev.map(ov => ov.playerId === playerId ? { ...ov, count: newCount } : ov);
+      return [...prev, { playerId, count: newCount }];
+    });
+  };
 
-      setOtherVotes(prev => [
-        ...prev.filter(ov => ov.playerId !== otherVotePlayerId),
-        { playerId: otherVotePlayerId, count: Number(otherVoteCount) }
-      ]);
-      setOtherVotePlayerId('');
-      setOtherVoteCount('');
+  // Compact Mode Quick Click Helper
+  const handleQuickVote = (playerId: string) => {
+    if (compactVoteTarget !== playerId) {
+      // First click: Select only
+      setCompactVoteTarget(playerId);
+    } else {
+      // Second click (while selected): Add vote
+      updateOtherVote(playerId, 1);
     }
   };
 
-  const removeOtherVote = (id: string) => {
-    setOtherVotes(prev => prev.filter(ov => ov.playerId !== id));
+  const getVoteCount = (playerId: string) => otherVotes.find(ov => ov.playerId === playerId)?.count || 0;
+
+  // New function: Send House Vote Directly
+  const sendHouseVoteToWall = (playerId: string, count: number) => {
+    setOtherVotes(prev => prev.filter(ov => ov.playerId !== playerId));
+    
+    // Clear selection if using compact mode
+    if (compactVoteTarget === playerId) setCompactVoteTarget('');
+
+    const nominee: Nominee = { 
+        playerId: playerId, 
+        reason: 'Voto da Casa',
+        voteCount: count,
+        isReverseVote: false,
+        isOpenVote: false
+    };
+    setNominees([...nominees, nominee]);
+
+    // Update Workflow (Moves to Sorteio)
+    const { reason, nominatedBy } = getNextWorkflowStep('Voto da Casa', playerId);
+    setCurrentNomineeReason(reason);
+    setCurrentNominatedBy(nominatedBy);
+    setCurrentNomineeId(''); // Clear Main Selector
+    setCurrentVoteCount('');
+  };
+
+  // Updated function: Send Tie Breaker
+  const sendTieBreakerToWall = (playerId: string, count: number) => {
+    setOtherVotes(prev => prev.filter(ov => ov.playerId !== playerId));
+    
+    // Clear selection if using compact mode
+    if (compactVoteTarget === playerId) setCompactVoteTarget('');
+
+    const nominee: Nominee = { 
+        playerId: playerId, 
+        reason: 'Voto da Casa (Desempate)',
+        voteCount: count,
+        isReverseVote: false,
+        isOpenVote: false
+    };
+    setNominees([...nominees, nominee]);
+
+    // Update Workflow (Moves to Sorteio)
+    const { reason, nominatedBy } = getNextWorkflowStep('Voto da Casa (Desempate)', playerId);
+    setCurrentNomineeReason(reason);
+    setCurrentNominatedBy(nominatedBy);
+    setCurrentNomineeId(''); // Clear Main Selector
+    setCurrentVoteCount('');
+  };
+
+  // --- AUTOMATION FEATURE ---
+  const announceVotesToHabbo = async () => {
+    // 1. Collect Other Votes (Not on Wall)
+    const votesList = otherVotes.map(ov => ({
+        name: getPlayerName(ov.playerId),
+        count: ov.count
+    }));
+
+    // 2. Collect House Nominees (On Wall)
+    nominees.forEach(nom => {
+        if ((nom.reason === 'Voto da Casa' || nom.reason === 'Voto da Casa (Desempate)') && nom.voteCount) {
+            votesList.push({
+                name: getPlayerName(nom.playerId),
+                count: nom.voteCount
+            });
+        }
+    });
+
+    // 3. Sort Ascending (Least votes to Most votes)
+    votesList.sort((a, b) => a.count - b.count);
+
+    if (votesList.length === 0) {
+        alert("Nenhum voto registrado para anunciar.");
+        return;
+    }
+
+    // 4. Trigger Electron Automation
+    if (window.electronAPI) {
+        try {
+          await window.electronAPI.automateVotes(votesList, clickCoords);
+        } catch (err) {
+          console.error("Erro na automação:", err);
+          alert("Erro ao executar automação. Verifique se o Habbo está aberto.");
+        }
+    } else {
+        // Fallback: Copy to clipboard
+        const text = votesList.map(v => `${v.name}: ${v.count} votos`).join('\n');
+        navigator.clipboard.writeText(text);
+        alert("Modo Web: Lista copiada para a área de transferência!\n(A automação de clique/digitação requer o app Desktop/Electron)\n\n" + text);
+    }
   };
 
   const removeNominee = (id: string) => {
@@ -146,443 +417,478 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
   };
 
   const toggleEliminated = (id: string) => {
-    setEliminatedIds(prev => 
-      prev.includes(id) ? prev.filter(eId => eId !== id) : [...prev, id]
-    );
+    setEliminatedIds(prev => prev.includes(id) ? prev.filter(eId => eId !== id) : [...prev, id]);
   };
 
   const handleSubmit = () => {
     if (!challengeName || eliminatedIds.length === 0) return;
-
-    const roundLog: RoundLog = {
-      roundNumber,
-      challengeName,
-      leaderId: leaderId || null,
-      vetoedIds,
-      immuneIds,
-      nominees,
-      otherVotes,
-      eliminatedIds
-    };
+    const roundLog: RoundLog = { roundNumber, challengeName, leaderIds: leaderIds, vetoedIds, immuneIds, nominees, otherVotes, eliminatedIds };
     onFinishRound(roundLog);
     
-    // Reset form
-    setChallengeName('');
-    setLeaderId('');
-    setVetoedIds([]);
-    setImmuneIds([]);
-    setNominees([]);
-    setOtherVotes([]);
+    // Reset
+    setChallengeName(''); 
+    setLeaderIds([]); 
+    setVetoedIds([]); 
+    setImmuneIds([]); 
+    setNominees([]); 
+    setOtherVotes([]); 
     setEliminatedIds([]);
+    setCompactVoteTarget('');
+    
+    // Reset to start of workflow
+    setCurrentNomineeReason('Indicação do Líder');
+    setCurrentNominatedBy('');
+    refreshSuggestions();
   };
 
-  // Select styling
-  const selectClass = "w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all custom-select";
-  const inputClass = "w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder-slate-600";
+  // Compact Styles Overrides
+  const panelClass = isCompact 
+    ? "glass-panel p-2 rounded-lg space-y-2" 
+    : "glass-panel p-5 rounded-2xl space-y-5";
+    
+  const selectClass = isCompact
+    ? "w-full bg-slate-950/50 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:border-indigo-500 outline-none"
+    : "w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all custom-select";
+  
+  const inputClass = isCompact
+    ? "w-full bg-slate-950/50 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 outline-none"
+    : "w-full bg-slate-950/50 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all placeholder-slate-600";
 
-  // If only 2 or 3 players left
   if (activePlayers.length <= 3) {
      return (
-       <div className="text-center space-y-8 py-16 glass-panel rounded-2xl animate-fade-in">
-         <div className="relative inline-block">
-             <div className="absolute inset-0 bg-yellow-500 blur-xl opacity-20 animate-pulse"></div>
-             <Trophy className="w-20 h-20 text-yellow-400 relative z-10 mx-auto" />
-         </div>
-         <div className="space-y-2">
-            <h2 className="text-4xl font-display font-bold text-white">Reta Final!</h2>
-            <p className="text-slate-400">Restam apenas {activePlayers.length} jogadores na casa.</p>
-         </div>
-         <div className="flex justify-center gap-4 max-w-md mx-auto">
-            <Button onClick={onEndGame} className="flex-1 py-3 bg-gradient-to-r from-yellow-600 to-orange-600 border-yellow-500/20 shadow-yellow-900/20">
-              <Crown className="w-5 h-5" />
-              Ir para Grande Final
-            </Button>
-         </div>
+       <div className="text-center space-y-4 py-8 glass-panel rounded-2xl animate-fade-in">
+         <Trophy className="w-12 h-12 text-yellow-400 mx-auto" />
+         <h2 className="text-2xl font-bold text-white">Reta Final!</h2>
+         <Button onClick={onEndGame} className="mx-auto"><Crown className="w-4 h-4" /> Ir para Grande Final</Button>
        </div>
      );
   }
 
+  // Filter eligible voters for dropdown (Full & Compact)
+  const eligibleVoters = activePlayers.filter(p => !isNominated(p.id) && !isLeader(p.id));
+
   return (
-    <div className="space-y-6 animate-slide-up pb-20">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
-            {roundNumber}
-          </span>
-          <span className="font-display tracking-tight">Gerenciar Rodada</span>
-        </h2>
-        <div className="glass-card px-3 py-1 rounded-full text-xs font-medium text-slate-400 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-          {activePlayers.length} Jogadores
+    <div className={`space-y-3 animate-slide-up ${isCompact ? 'pb-10' : 'pb-20'}`}>
+      
+      {/* Title only in full mode, in compact mode it's in header */}
+      {!isCompact && (
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">{roundNumber}</span>
+            <span className="font-display tracking-tight">Gerenciar Rodada</span>
+          </h2>
+          <div className="glass-card px-3 py-1 rounded-full text-xs font-medium text-slate-400 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> {activePlayers.length} Jogadores
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* 1. Challenge & Veto */}
-        <div className="glass-panel p-5 rounded-2xl space-y-5">
-          <div className="flex items-center gap-2 text-indigo-300 border-b border-white/5 pb-2">
-            <Activity className="w-4 h-4" />
-            <h3 className="font-semibold text-sm uppercase tracking-wider">A Prova</h3>
-          </div>
-          
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5 ml-1">Dinâmica Realizada</label>
-            <select 
-              value={challengeName}
-              onChange={e => setChallengeName(e.target.value)}
-              className={selectClass}
-            >
-              <option value="">Selecione a prova...</option>
-              {CHALLENGE_LIST.map(c => (
-                <option key={c.id} value={c.name}>{c.id}. {c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-xs text-slate-500 ml-1 flex items-center gap-1">
-              <Ban className="w-3 h-3" /> Vetados (Pelo líder anterior)
-            </label>
-            <div className="flex flex-wrap gap-2 p-3 bg-slate-950/30 rounded-xl border border-white/5 min-h-[60px]">
-              {activePlayers.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setVetoedIds(prev => 
-                      prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
-                    );
-                  }}
-                  className={`text-xs px-2.5 py-1 rounded-md border transition-all flex items-center gap-2 ${
-                    isVetoed(p.id) 
-                      ? 'bg-red-500/20 border-red-500/50 text-red-200' 
-                      : 'bg-slate-800/50 border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  {p.avatarUrl && <img src={p.avatarUrl} className="w-5 h-5 -mt-2 -mb-2 object-cover" alt="" />}
-                  {p.name}
+      {/* COMPACT LAYOUT: Stack Everything tightly */}
+      <div className={`grid gap-3 ${isCompact ? 'grid-cols-1' : 'md:grid-cols-2'}`}>
+        
+        {/* 1. Challenge */}
+        <div className={panelClass}>
+           {!isCompact && (
+              <div className="flex items-center justify-between text-indigo-300 border-b border-white/5 pb-2 mb-2">
+                <div className="flex items-center gap-2">
+                   <Activity className="w-4 h-4" /> <h3 className="font-semibold text-sm uppercase">A Prova</h3>
+                </div>
+                <button onClick={refreshSuggestions} className="text-xs text-indigo-400 hover:text-indigo-200 flex items-center gap-1">
+                   <Dice5 className="w-3 h-3" /> Sugerir
                 </button>
-              ))}
-              {activePlayers.length === 0 && <span className="text-slate-600 text-xs italic">Nenhum jogador ativo</span>}
+              </div>
+            )}
+            
+            {/* AI Suggestions Block */}
+            {suggestions.length > 0 && (
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                 {suggestions.map(s => (
+                   <div 
+                     key={s.id} 
+                     onClick={() => setChallengeName(s.name)}
+                     className={`cursor-pointer rounded border p-1.5 flex flex-col justify-between h-full transition-all hover:scale-105 active:scale-95 ${challengeName === s.name ? 'bg-indigo-600 border-indigo-400 ring-2 ring-indigo-500/50' : 'bg-slate-900/60 border-slate-700 hover:border-indigo-500/50'}`}
+                   >
+                     <span className="text-[10px] font-bold text-white leading-tight mb-1 line-clamp-2">{s.name}</span>
+                     <div className="flex items-center gap-1 text-[9px] text-slate-400">
+                        {s.type.toLowerCase().includes('habilidade') && <span className="text-orange-400">Hab</span>}
+                        {s.type.toLowerCase().includes('sorte') && <span className="text-green-400">Sor</span>}
+                        {!s.type.toLowerCase().includes('habilidade') && !s.type.toLowerCase().includes('sorte') && <span className="text-blue-400">Mix</span>}
+                        <span className="opacity-50">•</span>
+                        <Clock className="w-2.5 h-2.5" /> {s.duration.replace('min', 'm')}
+                     </div>
+                   </div>
+                 ))}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <select value={challengeName} onChange={e => setChallengeName(e.target.value)} className={`${selectClass} ${currentChallengeCount > 0 ? 'border-yellow-500 text-yellow-200 font-bold' : ''}`}>
+                <option value="">Selecione a Prova...</option>
+                {GAME_DATABASE.map(c => {
+                  const count = getChallengeUsageCount(c.name);
+                  return (
+                    <option key={c.id} value={c.name} className={count > 0 ? "font-bold text-yellow-500 bg-slate-900" : ""}>
+                      {count > 0 ? `⚠️ (${count}x) ${c.name}` : `${c.name}`}
+                    </option>
+                  );
+                })}
+              </select>
+              
+              {/* Selected Challenge Details */}
+              {selectedChallengeData && selectedChallengeData.name !== "Nenhuma Prova" && selectedChallengeData.obs && (
+                 <div className="bg-slate-900/40 rounded-lg p-2 text-xs space-y-1 border border-white/5 animate-fade-in">
+                    <div className="flex justify-between">
+                       <span className="text-slate-400">Tipo: <span className="text-indigo-300">{selectedChallengeData.type}</span></span>
+                       <span className="text-slate-400">Jogadores: <span className="text-white">{selectedChallengeData.min === 0 ? 'Livre' : selectedChallengeData.min} a {selectedChallengeData.max === 999 ? 'Livre' : selectedChallengeData.max}</span></span>
+                    </div>
+                    {/* Only show Obs if it exists */}
+                    {selectedChallengeData.obs && (
+                       <div className="flex gap-1 text-orange-300/80 italic">
+                          <Info className="w-3 h-3 mt-0.5 shrink-0" /> {selectedChallengeData.obs}
+                       </div>
+                    )}
+                 </div>
+              )}
+              
+              {/* Very visible alert badge if the selected challenge was used before */}
+              {currentChallengeCount > 0 && (
+                <div className="animate-pulse bg-red-500/20 border border-red-500/50 rounded px-2 py-1.5 flex items-center justify-center gap-2 text-red-200 font-bold text-xs uppercase shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  Atenção: Prova já realizada {currentChallengeCount}x!
+                </div>
+              )}
             </div>
-          </div>
         </div>
 
-        {/* 2. Leadership */}
-        <div className="glass-panel p-5 rounded-2xl space-y-5">
-          <div className="flex items-center gap-2 text-yellow-300 border-b border-white/5 pb-2">
-            <Crown className="w-4 h-4" />
-            <h3 className="font-semibold text-sm uppercase tracking-wider">Liderança & Anjo</h3>
-          </div>
-          
-          <div>
-            <label className="block text-xs text-slate-500 mb-1.5 ml-1">Líder da Semana</label>
-            <select 
-              value={leaderId}
-              onChange={e => {
-                setLeaderId(e.target.value);
-                setImmuneIds(prev => prev.filter(id => id !== e.target.value));
-              }}
-              className={`${selectClass} border-yellow-500/20 focus:border-yellow-500 focus:ring-yellow-500/50`}
-            >
-              <option value="">Selecione o Líder...</option>
-              {activePlayers.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-xs text-slate-500 ml-1 flex items-center gap-1">
-              <Shield className="w-3 h-3" /> Imunizados
-            </label>
-            <div className="flex flex-wrap gap-2 p-3 bg-slate-950/30 rounded-xl border border-white/5 min-h-[60px]">
-              {activePlayers.filter(p => p.id !== leaderId).map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => {
-                    setImmuneIds(prev => 
-                      prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
-                    );
-                  }}
-                  className={`text-xs px-2.5 py-1 rounded-md border transition-all flex items-center gap-2 ${
-                    isImmune(p.id) 
-                      ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-200 shadow-[0_0_10px_rgba(234,179,8,0.1)]' 
-                      : 'bg-slate-800/50 border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800'
-                  }`}
-                >
-                  {p.avatarUrl && <img src={p.avatarUrl} className="w-5 h-5 -mt-2 -mb-2 object-cover" alt="" />}
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* 2. Leaders (Now Multi-Select) */}
+        <div className={panelClass}>
+            {!isCompact && (
+               <div className="flex items-center gap-2 text-yellow-300 border-b border-white/5 pb-2 mb-2">
+                 <Crown className="w-4 h-4" /> <h3 className="font-semibold text-sm uppercase">Líder(es)</h3>
+               </div>
+             )}
+             {/* Multi-select leader interface */}
+             <div className="flex flex-wrap gap-2">
+               {activePlayers.map(p => (
+                 <button 
+                    key={p.id} 
+                    onClick={() => toggleLeader(p.id)}
+                    className={`text-xs px-2 py-1 rounded border flex items-center gap-1 ${
+                      isLeader(p.id) 
+                        ? 'bg-yellow-500/20 border-yellow-500 text-yellow-200' 
+                        : 'bg-slate-800/50 border-transparent text-slate-400'
+                    }`}
+                 >
+                   {isLeader(p.id) && <Crown className="w-3 h-3" />}
+                   {p.name}
+                 </button>
+               ))}
+             </div>
         </div>
 
-        {/* 3. The Wall */}
-        <div className="glass-panel p-5 rounded-2xl space-y-5 md:col-span-2 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-5">
-            <Skull className="w-32 h-32" />
+        {/* 3. Immunes/Vetoes */}
+        {!isCompact && (
+          <div className={`${panelClass} md:col-span-2`}>
+             <div className="space-y-2">
+                <label className="text-xs text-slate-500 block">Vetados / Imunes (Clique para selecionar)</label>
+                <div className="flex flex-wrap gap-2">
+                  {activePlayers.map(p => (
+                    <button key={p.id} onClick={() => setVetoedIds(prev => prev.includes(p.id) ? prev.filter(i => i!==p.id) : [...prev, p.id])} className={`text-xs px-2 py-1 rounded border ${isVetoed(p.id) ? 'bg-red-500/20 border-red-500' : 'bg-slate-800/50 border-transparent'}`}>{p.name} (V)</button>
+                  ))}
+                  <div className="w-[1px] bg-white/10 mx-1"></div>
+                  {activePlayers.filter(p => !isLeader(p.id)).map(p => (
+                    <button key={p.id} onClick={() => setImmuneIds(prev => prev.includes(p.id) ? prev.filter(i => i!==p.id) : [...prev, p.id])} className={`text-xs px-2 py-1 rounded border ${isImmune(p.id) ? 'bg-yellow-500/20 border-yellow-500 text-yellow-200' : 'bg-slate-800/50 border-transparent'}`}>{p.name} (I)</button>
+                  ))}
+                </div>
+             </div>
           </div>
-          
-          <div className="flex items-center gap-2 text-red-400 border-b border-white/5 pb-2 relative z-10">
-            <AlertTriangle className="w-4 h-4" />
-            <h3 className="font-semibold text-sm uppercase tracking-wider">Formação do Paredão</h3>
-          </div>
+        )}
 
-          <div className="grid gap-4 md:grid-cols-12 relative z-10">
-             <div className="md:col-span-5 space-y-3">
-               <div className="space-y-3 p-4 bg-slate-900/40 rounded-xl border border-white/5">
-                 <select 
-                    value={currentNomineeId}
-                    onChange={e => setCurrentNomineeId(e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="">Selecionar Emparedado...</option>
-                    {activePlayers
-                      .filter(p => !isLeader(p.id) && !isImmune(p.id) && !isNominated(p.id))
-                      .map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))
-                    }
-                  </select>
+        {/* 4. The Wall */}
+        <div className={`${panelClass} md:col-span-2 relative overflow-hidden`}>
+          {!isCompact && (
+            <div className="flex items-center gap-2 text-red-400 border-b border-white/5 pb-2 relative z-10 mb-2">
+              <AlertTriangle className="w-4 h-4" /> <h3 className="font-semibold text-sm uppercase">Paredão</h3>
+            </div>
+          )}
 
-                  <select 
-                    value={currentNomineeReason}
-                    onChange={e => setCurrentNomineeReason(e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="Voto da Casa">Voto da Casa</option>
-                    <option value="Indicação do Líder">Indicação do Líder</option>
-                    <option value="Resta 1">Resta 1</option>
-                    <option value="Primeiro a perder">Primeiro a perder</option>
-                    <option value="Contra-golpe">Contra-golpe</option>
-                    <option value="Big Fone">Big Fone</option>
-                    <option value="Sorteio">Sorteio</option>
-                  </select>
+          <div className={`grid gap-2 relative z-10 ${isCompact ? 'grid-cols-1' : 'md:grid-cols-12'}`}>
+             <div className={isCompact ? 'col-span-1' : 'md:col-span-5'}>
+               <div className={`bg-slate-900/40 rounded-xl border border-white/5 ${isCompact ? 'p-2 space-y-1.5' : 'p-4 space-y-3'}`}>
+                 <div className="flex gap-2">
+                   <select value={currentNomineeId} onChange={e => setCurrentNomineeId(e.target.value)} className={selectClass}>
+                      <option value="">Emparedado...</option>
+                      {activePlayers.filter(p => !isLeader(p.id) && !isImmune(p.id) && !isNominated(p.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    {/* Reason next to name in compact */}
+                    {isCompact && (
+                      <select value={currentNomineeReason} onChange={e => setCurrentNomineeReason(e.target.value)} className={selectClass}>
+                        <option value="Indicação do Líder">Líder</option>
+                        <option value="Contra-golpe">Contra</option>
+                        <option value="Voto da Casa">Casa</option>
+                        <option value="Sorteio">Sorteio</option>
+                        <option value="Big Fone">Fone</option>
+                        <option value="Perdeu na Prova">Perdeu na Prova</option>
+                        <option value="Voto da Casa (Desempate)">Desempate</option>
+                      </select>
+                    )}
+                 </div>
+
+                  {!isCompact && (
+                    <select value={currentNomineeReason} onChange={e => setCurrentNomineeReason(e.target.value)} className={selectClass}>
+                      <option value="Indicação do Líder">Indicação do Líder</option>
+                      <option value="Contra-golpe">Contra-golpe</option>
+                      <option value="Voto da Casa">Voto da Casa</option>
+                      <option value="Sorteio">Sorteio</option>
+                      <option value="Perdeu na Prova">Perdeu na Prova</option>
+                      <option value="Voto da Casa (Desempate)">Voto da Casa (Desempate)</option>
+                      <option value="Big Fone">Big Fone</option>
+                    </select>
+                  )}
                   
                   {currentNomineeReason === 'Contra-golpe' && (
-                    <div className="animate-fade-in">
-                       <label className="block text-xs text-slate-500 mb-1 ml-1">Quem puxou?</label>
-                       <select 
-                        value={currentNominatedBy}
-                        onChange={e => setCurrentNominatedBy(e.target.value)}
-                        className={`${selectClass} border-indigo-500/50 bg-indigo-900/10`}
-                      >
-                        <option value="">Selecione o jogador...</option>
-                        {activePlayers
-                          .filter(p => p.id !== currentNomineeId) // Can't pull yourself
-                          .map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))
-                        }
+                     <select value={currentNominatedBy} onChange={e => setCurrentNominatedBy(e.target.value)} className={`${selectClass} border-indigo-500/50`}>
+                        <option value="">Quem puxou?</option>
+                        {nominees.map(nom => { const p = activePlayers.find(ap => ap.id === nom.playerId); return p ? <option key={p.id} value={p.id}>{p.name}</option> : null; })}
                       </select>
-                    </div>
                   )}
 
                   <div className="flex gap-2">
-                    <input 
-                       type="number" 
-                       min="0"
-                       value={currentVoteCount}
-                       onChange={e => setCurrentVoteCount(e.target.value === '' ? '' : Number(e.target.value))}
-                       placeholder="Qtd. Votos (Opcional)"
-                       className={`${inputClass} flex-1`}
-                     />
-                     <button
-                        onClick={() => setIsOpenVote(!isOpenVote)}
-                        className={`px-3 rounded-lg border flex items-center justify-center transition-all ${
-                          isOpenVote 
-                            ? 'bg-blue-500/20 border-blue-500 text-blue-300' 
-                            : 'bg-slate-950/50 border-slate-700 text-slate-500'
-                        }`}
-                        title="Voto Aberto?"
-                     >
-                       <Megaphone className="w-4 h-4" />
-                     </button>
+                    <input type="number" min="0" value={currentVoteCount} onChange={e => setCurrentVoteCount(e.target.value === '' ? '' : Number(e.target.value))} placeholder="Votos" className={`${inputClass} flex-1`} />
+                     <button onClick={() => setIsOpenVote(!isOpenVote)} className={`px-2 rounded border flex items-center justify-center ${isOpenVote ? 'bg-blue-500/20 border-blue-500 text-blue-300' : 'bg-slate-950/50 border-slate-700 text-slate-500'}`} title="Voto Aberto?"><Megaphone className="w-3 h-3" /></button>
+                     {/* Compact Add Button */}
+                     {isCompact && (
+                       <button onClick={handleAddNominee} disabled={!currentNomineeId} className="px-3 bg-indigo-600 text-white rounded font-bold">+</button>
+                     )}
                   </div>
                    
-                   <button
-                    onClick={() => setIsReverseVote(!isReverseVote)}
-                    className={`w-full p-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-2 transition-all border ${
-                      isReverseVote 
-                        ? 'bg-green-500/10 border-green-500/40 text-green-300' 
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-                    }`}
-                  >
-                    {isReverseVote ? <ThumbsUp className="w-3 h-3"/> : <ThumbsDown className="w-3 h-3"/>}
-                    {isReverseVote ? 'Modo: Salvar (Voto Reverso)' : 'Modo: Eliminar (Normal)'}
-                  </button>
+                   {!isCompact && (
+                      <button onClick={() => setIsReverseVote(!isReverseVote)} className={`w-full p-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border ${isReverseVote ? 'bg-green-500/10 border-green-500/40 text-green-300' : 'bg-slate-800 border-slate-700'}`}>
+                        {isReverseVote ? 'Modo: Salvar' : 'Modo: Eliminar'}
+                      </button>
+                   )}
 
-                   <Button onClick={handleAddNominee} disabled={!currentNomineeId || (currentNomineeReason === 'Contra-golpe' && !currentNominatedBy)} variant="secondary" fullWidth className="mt-2">
-                     Confirmar Emparedado
-                   </Button>
+                   {!isCompact && (
+                     <Button onClick={handleAddNominee} disabled={!currentNomineeId} variant="secondary" fullWidth className="mt-2">Confirmar</Button>
+                   )}
                </div>
 
                {/* OTHER VOTES SECTION */}
-               <div className="mt-4 p-4 bg-slate-900/40 rounded-xl border border-white/5 space-y-3">
-                 <div className="flex items-center gap-2 text-slate-400 text-sm font-semibold border-b border-white/5 pb-2">
-                    <ClipboardList className="w-4 h-4" /> Registro de Votos (Outros)
+               <div className={`${isCompact ? 'mt-2 bg-slate-900/40 rounded-xl border border-white/5 p-2' : 'mt-4 p-4 max-h-[300px] bg-slate-900/40 rounded-xl border border-white/5 overflow-y-auto custom-scrollbar'}`}>
+                 <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-2">
+                    <div className="text-slate-400 text-[10px] font-semibold uppercase flex items-center gap-1">
+                      <User className="w-3 h-3" /> Votos da Casa
+                    </div>
+                    {/* BUTTONS TO REVEAL/AUTOMATE */}
+                    <div className="flex items-center gap-1">
+                      <button 
+                         onClick={() => setShowCoordsSettings(!showCoordsSettings)}
+                         className={`p-1 rounded transition-colors ${showCoordsSettings ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                         title="Configurar Posição do Clique"
+                      >
+                         <Settings2 className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={announceVotesToHabbo}
+                        className="text-[10px] flex items-center gap-1 text-indigo-400 hover:text-indigo-200 bg-indigo-500/10 hover:bg-indigo-500/30 px-2 py-0.5 rounded transition-colors"
+                        title="Digitar votos no Habbo (Desktop) ou Copiar"
+                      >
+                        <Share className="w-3 h-3" /> Revelar
+                      </button>
+                    </div>
                  </div>
-                 <div className="flex gap-2">
-                    <select 
-                      value={otherVotePlayerId}
-                      onChange={e => setOtherVotePlayerId(e.target.value)}
-                      className={`${selectClass} flex-1 text-xs`}
-                    >
-                      <option value="">Quem recebeu voto?</option>
-                      {activePlayers
-                        .filter(p => !isNominated(p.id))
-                        .map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))
-                      }
-                    </select>
-                    <input 
-                       type="number" 
-                       min="0"
-                       value={otherVoteCount}
-                       onChange={e => setOtherVoteCount(e.target.value === '' ? '' : Number(e.target.value))}
-                       placeholder="Qtd."
-                       className={`${inputClass} w-16 text-center px-1`}
-                     />
-                     <button 
-                       onClick={handleAddOtherVote}
-                       disabled={!otherVotePlayerId || !otherVoteCount}
-                       className="bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-lg transition-colors"
-                     >
-                       <Plus className="w-4 h-4" />
-                     </button>
-                 </div>
+
+                 {/* COORDS SETTINGS PANEL */}
+                 {showCoordsSettings && (
+                    <div className="mb-2 p-2 bg-slate-950/80 rounded border border-indigo-500/30 flex items-center gap-2 text-xs animate-slide-up">
+                       <Crosshair className="w-3 h-3 text-indigo-400" />
+                       <div className="flex items-center gap-1">
+                         <span>X:</span>
+                         <input 
+                           type="number" 
+                           value={clickCoords.x} 
+                           onChange={(e) => saveCoords({...clickCoords, x: Number(e.target.value)})}
+                           className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center outline-none focus:border-indigo-500" 
+                         />
+                       </div>
+                       <div className="flex items-center gap-1">
+                         <span>Y:</span>
+                         <input 
+                           type="number" 
+                           value={clickCoords.y} 
+                           onChange={(e) => saveCoords({...clickCoords, y: Number(e.target.value)})}
+                           className="w-12 bg-slate-800 border border-slate-700 rounded px-1 py-0.5 text-center outline-none focus:border-indigo-500" 
+                         />
+                       </div>
+                       <span className="text-[9px] text-slate-500 ml-auto">Foca e Clica</span>
+                    </div>
+                 )}
                  
-                 {otherVotes.length > 0 && (
-                   <div className="flex flex-wrap gap-2 mt-2">
-                     {otherVotes.map(ov => {
-                       const p = activePlayers.find(ap => ap.id === ov.playerId);
-                       return (
-                         <span key={ov.playerId} className="text-xs bg-slate-800 px-2 py-1 rounded border border-white/10 flex items-center gap-1.5">
-                           {p?.name} <span className="text-indigo-400 font-mono">({ov.count})</span>
-                           <button onClick={() => removeOtherVote(ov.playerId)} className="text-slate-500 hover:text-red-400 ml-1">&times;</button>
-                         </span>
-                       );
-                     })}
-                   </div>
+                 {isCompact ? (
+                    /* COMPACT MODE: 3-COLUMN GRID + ACTIVE PANEL */
+                    <div className="space-y-2">
+                        {/* 1. Grid of Eligible Voters (Click = Select, Click Again = Vote) */}
+                        <div className="grid grid-cols-3 gap-1 max-h-[120px] overflow-y-auto custom-scrollbar p-1">
+                           {eligibleVoters.map(p => {
+                               const count = getVoteCount(p.id);
+                               const isTarget = compactVoteTarget === p.id;
+                               return (
+                                   <button 
+                                      key={p.id}
+                                      onClick={() => handleQuickVote(p.id)}
+                                      className={`
+                                        text-[10px] px-1 py-2 rounded border truncate relative transition-all active:scale-95
+                                        ${count > 0 
+                                            ? 'bg-indigo-500/20 border-indigo-500 text-indigo-200' 
+                                            : 'bg-slate-950/50 border-slate-700 text-slate-400 hover:border-slate-500'}
+                                        ${isTarget ? 'ring-1 ring-white/50 bg-slate-800' : ''}
+                                      `}
+                                   >
+                                       {p.name}
+                                       {count > 0 && (
+                                           <span className="absolute top-0 right-0 bg-indigo-500 text-white text-[9px] w-3.5 h-3.5 flex items-center justify-center rounded-bl rounded-tr font-bold shadow-sm">
+                                               {count}
+                                           </span>
+                                       )}
+                                   </button>
+                               );
+                           })}
+                        </div>
+
+                        {/* 2. Active Target Controls (Fixed below grid) */}
+                        {compactVoteTarget ? (
+                            <div className="bg-slate-950/80 rounded border border-indigo-500/30 p-2 space-y-1.5 animate-scale-in">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-white truncate max-w-[90px]">
+                                        {getPlayerName(compactVoteTarget)}
+                                    </span>
+                                    <div className="flex items-center bg-slate-800 rounded border border-slate-700/50">
+                                        <button onClick={() => updateOtherVote(compactVoteTarget, -1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-700 text-slate-400"><Minus className="w-3 h-3" /></button>
+                                        <span className="text-sm w-6 text-center font-bold text-indigo-400">{getVoteCount(compactVoteTarget)}</span>
+                                        <button onClick={() => updateOtherVote(compactVoteTarget, 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-700 text-white"><Plus className="w-3 h-3" /></button>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button 
+                                      onClick={() => sendHouseVoteToWall(compactVoteTarget, getVoteCount(compactVoteTarget))}
+                                      disabled={getVoteCount(compactVoteTarget) === 0}
+                                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] py-1 rounded flex items-center justify-center gap-1 disabled:opacity-50"
+                                    >
+                                        <ArrowRight className="w-3 h-3" /> Paredão
+                                    </button>
+                                    <button 
+                                      onClick={() => sendTieBreakerToWall(compactVoteTarget, getVoteCount(compactVoteTarget))}
+                                      disabled={getVoteCount(compactVoteTarget) === 0}
+                                      className="flex-1 bg-red-600 hover:bg-red-500 text-white text-[10px] py-1 rounded flex items-center justify-center gap-1 disabled:opacity-50"
+                                    >
+                                        <Gavel className="w-3 h-3" /> Desempate
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-[10px] text-slate-600 text-center italic py-2">
+                                Clique para selecionar, depois clique para votar (+1)
+                            </div>
+                        )}
+                    </div>
+                 ) : (
+                    /* FULL MODE: Original List */
+                    <div className="grid grid-cols-1 gap-1">
+                        {eligibleVoters.map(p => {
+                            const count = getVoteCount(p.id);
+                            return (
+                                <div key={p.id} className={`flex items-center justify-between p-1.5 rounded border ${count > 0 ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-950/30 border-white/5'}`}>
+                                    <span className="text-xs truncate font-medium text-slate-300 flex-1">{p.name}</span>
+                                    <div className="flex items-center gap-1">
+                                        {/* SEND HOUSE VOTE BUTTON */}
+                                        <button 
+                                        onClick={() => sendHouseVoteToWall(p.id, count)} 
+                                        disabled={count === 0} 
+                                        className={`w-5 h-5 flex items-center justify-center rounded bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-colors ${count > 0 ? '' : 'opacity-0'}`}
+                                        title="Enviar como Voto da Casa"
+                                        >
+                                        <ArrowRight className="w-3 h-3" />
+                                        </button>
+
+                                        {/* SEND TIE BREAKER BUTTON */}
+                                        <button 
+                                        onClick={() => sendTieBreakerToWall(p.id, count)} 
+                                        disabled={count === 0} 
+                                        className={`w-5 h-5 flex items-center justify-center rounded bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-colors ${count > 0 ? '' : 'opacity-0'}`}
+                                        title="Enviar para Desempate"
+                                        >
+                                        <Gavel className="w-3 h-3" />
+                                        </button>
+
+                                        {/* COUNTER */}
+                                        <div className="flex items-center bg-slate-800 rounded border border-slate-700/50">
+                                        <button onClick={() => updateOtherVote(p.id, -1)} className="w-5 h-5 flex items-center justify-center hover:bg-slate-700"><Minus className="w-3 h-3" /></button>
+                                        <span className={`text-[10px] w-5 text-center font-bold ${count > 0 ? 'text-indigo-400' : 'text-slate-600'}`}>{count}</span>
+                                        <button onClick={() => updateOtherVote(p.id, 1)} className="w-5 h-5 flex items-center justify-center hover:bg-slate-700"><Plus className="w-3 h-3" /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                            })
+                        }
+                    </div>
                  )}
                </div>
              </div>
 
-             <div className="md:col-span-7 space-y-6">
-               <div>
-                  <label className="block text-xs text-slate-500 mb-2 ml-1">No Paredão</label>
-                  {nominees.length === 0 ? (
-                    <div className="h-full min-h-[100px] flex items-center justify-center border-2 border-dashed border-slate-800 rounded-xl text-slate-600 text-sm">
-                      Ninguém no paredão ainda
-                    </div>
-                  ) : (
-                    <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
-                      {nominees.map((nom, idx) => {
-                        const p = activePlayers.find(ap => ap.id === nom.playerId);
-                        const nominator = nom.nominatedBy ? activePlayers.find(ap => ap.id === nom.nominatedBy) : null;
-                        
-                        return (
-                          <div key={nom.playerId} className={`relative overflow-hidden border p-3 rounded-xl group animate-scale-in ${
-                            nom.isReverseVote 
-                              ? 'bg-green-500/5 border-green-500/20' 
-                              : 'bg-red-500/5 border-red-500/20'
-                          }`} style={{ animationDelay: `${idx * 100}ms`}}>
-                            <div className="flex justify-between items-start relative z-10">
-                              <div className="flex gap-3">
-                                <div className="w-10 h-10 bg-slate-900 rounded-full border border-white/10 overflow-hidden shrink-0">
-                                    {p?.avatarUrl && <img src={p.avatarUrl} className="w-full h-full object-cover scale-150 translate-y-2" alt="" />}
-                                </div>
-                                <div>
-                                  <span className={`font-bold block text-sm ${nom.isReverseVote ? 'text-green-300' : 'text-red-300'}`}>
-                                    {p?.name}
-                                  </span>
-                                  <div className="text-xs text-slate-400 mt-1 flex flex-col gap-0.5">
-                                    <span className="opacity-75 flex items-center gap-1">
-                                        {nom.reason === 'Sorteio' && <Dice5 className="w-3 h-3 inline" />}
-                                        {nom.isOpenVote && <Megaphone className="w-3 h-3 inline text-blue-400" />}
-                                        {nom.reason === 'Contra-golpe' && <Sword className="w-3 h-3 inline text-orange-400" />}
-                                        {nom.reason}
-                                    </span>
-                                    {nominator && (
-                                       <span className="text-orange-300 text-[10px]">Por: {nominator.name}</span>
-                                    )}
-                                    {nom.voteCount !== undefined && <span className="font-mono bg-slate-800/50 px-1 rounded w-fit">{nom.voteCount} votos</span>}
-                                  </div>
-                                </div>
-                              </div>
-                              <button onClick={() => removeNominee(nom.playerId)} className="text-slate-500 hover:text-white transition-colors bg-slate-900/50 rounded p-1">
-                                  <span className="sr-only">Remover</span>
-                                  &times;
-                              </button>
-                            </div>
-                            {/* Background glow */}
-                            <div className={`absolute -right-4 -bottom-4 w-16 h-16 rounded-full blur-xl opacity-20 ${nom.isReverseVote ? 'bg-green-500' : 'bg-red-500'}`}></div>
+             <div className={isCompact ? 'col-span-1' : 'md:col-span-7'}>
+               <div className={`grid gap-2 ${isCompact ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                 {nominees.map((nom) => {
+                    const p = activePlayers.find(ap => ap.id === nom.playerId);
+                    return (
+                      <div key={nom.playerId} className={`relative border p-2 rounded flex justify-between items-center ${nom.isReverseVote ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+                          <div>
+                            <span className={`font-bold text-xs block ${nom.isReverseVote ? 'text-green-300' : 'text-red-300'}`}>{p?.name}</span>
+                            <span className="text-[10px] text-slate-500 block">{nom.reason} {nom.voteCount ? `(${nom.voteCount})` : ''}</span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          <button onClick={() => removeNominee(nom.playerId)} className="text-slate-500 hover:text-white px-2">&times;</button>
+                      </div>
+                    );
+                 })}
+                 {nominees.length === 0 && <div className="text-center text-xs text-slate-600 py-2 border border-dashed border-slate-800 rounded">Vazio</div>}
                </div>
              </div>
           </div>
         </div>
 
-        {/* 4. Elimination */}
-        <div className="glass-panel p-5 rounded-2xl space-y-5 md:col-span-2 border-t-4 border-t-purple-500/30">
-          <div className="flex items-center gap-2 text-purple-400 border-b border-white/5 pb-2">
-            <CheckSquare className="w-4 h-4" />
-            <h3 className="font-semibold text-sm uppercase tracking-wider">Resultado da Eliminação</h3>
-          </div>
-          
-          {nominees.length === 0 ? (
-            <div className="text-center py-6 text-slate-600 text-sm">
-              Defina o paredão acima para habilitar a eliminação.
-            </div>
-          ) : (
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-              {nominees.map(nom => {
-                const p = activePlayers.find(ap => ap.id === nom.playerId);
-                const eliminated = isEliminated(nom.playerId);
-                return (
-                  <button
-                    key={nom.playerId}
-                    onClick={() => toggleEliminated(nom.playerId)}
-                    className={`p-4 rounded-xl border transition-all duration-300 flex items-center justify-between group ${
-                      eliminated
-                        ? 'bg-purple-600/20 border-purple-500/50 text-white shadow-[0_0_15px_rgba(147,51,234,0.15)]'
-                        : 'bg-slate-900/40 border-slate-700/50 text-slate-400 hover:bg-slate-800 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                       <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-800 border border-white/10">
-                          {p?.avatarUrl && <img src={p.avatarUrl} className="w-full h-full object-cover scale-150 translate-y-1" alt="" />}
-                       </div>
-                       <span className="font-semibold">{p?.name}</span>
-                    </div>
-                    <div className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${eliminated ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-600 group-hover:bg-slate-700'}`}>
-                       {eliminated ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                    </div>
-                  </button>
-                );
-              })}
+        {/* 5. Elimination */}
+        <div className={`${panelClass} md:col-span-2 border-t-2 border-t-purple-500/30`}>
+          {!isCompact && (
+            <div className="flex items-center gap-2 text-purple-400 border-b border-white/5 pb-2">
+              <CheckSquare className="w-4 h-4" /> <h3 className="font-semibold text-sm uppercase">Eliminação</h3>
             </div>
           )}
+          
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+            {nominees.map(nom => {
+              const p = activePlayers.find(ap => ap.id === nom.playerId);
+              const eliminated = isEliminated(nom.playerId);
+              return (
+                <button key={nom.playerId} onClick={() => toggleEliminated(nom.playerId)} className={`p-2 rounded border flex items-center justify-between ${eliminated ? 'bg-purple-600/20 border-purple-500 text-white' : 'bg-slate-900/40 border-slate-700 text-slate-500'}`}>
+                  <span className="font-semibold text-xs truncate">{p?.name}</span>
+                  {eliminated ? <CheckSquare className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="fixed bottom-6 left-0 right-0 px-4 md:px-0 flex justify-center z-50 pointer-events-none">
-        <div className="pointer-events-auto max-w-md w-full shadow-2xl shadow-black/80">
+      <div className={`fixed bottom-0 left-0 right-0 bg-[#0B0E14] border-t border-white/10 p-2 flex justify-center z-50 ${isCompact ? '' : 'bottom-6 bg-transparent border-none pointer-events-none'}`}>
+        <div className={`w-full ${isCompact ? '' : 'pointer-events-auto max-w-md shadow-2xl'}`}>
           <Button 
             onClick={handleSubmit} 
             fullWidth 
-            className="py-4 text-lg font-bold tracking-wide"
+            className={isCompact ? "py-2 text-sm" : "py-4 text-lg font-bold"}
             disabled={!challengeName || nominees.length === 0 || eliminatedIds.length === 0}
           >
-            <Save className="w-5 h-5" />
-            Confirmar Rodada
-            <ArrowRight className="w-5 h-5 ml-1" />
+            <Save className={isCompact ? "w-4 h-4" : "w-5 h-5"} />
+            {isCompact ? 'Confirmar' : 'Confirmar Rodada'}
           </Button>
         </div>
       </div>

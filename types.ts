@@ -1,3 +1,4 @@
+
 export interface Player {
   id: string;
   name: string;
@@ -22,7 +23,7 @@ export interface OtherVote {
 export interface RoundLog {
   roundNumber: number;
   challengeName: string; // "Qual prova eu fiz"
-  leaderId: string | null;
+  leaderIds: string[]; // Changed to array to support multiple leaders
   vetoedIds: string[]; // Players vetoed from the challenge
   immuneIds: string[];
   nominees: Nominee[];
@@ -41,4 +42,15 @@ export interface GameState {
   players: Player[];
   rounds: RoundLog[];
   currentRound: number;
+  targetDuration: number; // Duration in minutes (60, 90, 120)
+}
+
+// Global declaration for Electron Bridge
+declare global {
+  interface Window {
+    electronAPI?: {
+      automateVotes: (votes: { name: string; count: number }[], coords: { x: number; y: number }) => Promise<string>;
+      toggleCompact: (isCompact: boolean) => void;
+    };
+  }
 }
