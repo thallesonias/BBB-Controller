@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Player, RoundLog, Nominee, OtherVote } from '../types';
 import { Button } from './Button';
-import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2, PlayCircle } from 'lucide-react';
+import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2, PlayCircle, BookOpen } from 'lucide-react';
 
 interface RoundManagerProps {
   roundNumber: number;
@@ -15,7 +15,7 @@ interface RoundManagerProps {
   targetDuration: number; // in minutes
 }
 
-// Full Game Database from CSV (Strictly matched to provided CSV)
+// Full Game Database from CSV + Descriptions provided
 interface GameData {
   id: number;
   name: string;
@@ -24,48 +24,49 @@ interface GameData {
   max: number; // 999 if 'Livre'
   duration: string;
   obs: string;
+  explanation?: string; // New field for automation text
   score?: number; // Internal use for sorting
 }
 
 const GAME_DATABASE: GameData[] = [
-  { id: 1, name: "A Escolha", type: "Social / Sorte", min: 8, max: 18, duration: "2 - 3 min", obs: "" },
-  { id: 2, name: "Balão", type: "Sorte", min: 8, max: 999, duration: "1,5 min", obs: "" },
-  { id: 3, name: "Banzai", type: "Sorte", min: 0, max: 999, duration: "30s - 1 min", obs: "" },
-  { id: 4, name: "Batata Quente", type: "Habilidade", min: 7, max: 999, duration: "Variável", obs: "Elimina 1 a cada 30s" },
-  { id: 5, name: "Cabo de Guerra", type: "Habilidade", min: 6, max: 999, duration: "30s", obs: "Por dupla ou indivíduo" },
-  { id: 6, name: "Caixas", type: "Habilidade", min: 5, max: 11, duration: "30s", obs: "" },
-  { id: 7, name: "Céu ou Inferno", type: "Sorte", min: 6, max: 999, duration: "1 - 2 min", obs: "" },
-  { id: 8, name: "Chão é Lava", type: "Sorte", min: 8, max: 999, duration: "3 - 5 min", obs: "" },
-  { id: 9, name: "Cliques", type: "Habilidade", min: 5, max: 7, duration: "1,5 min", obs: "" },
-  { id: 10, name: "Cruzamento", type: "Habilidade", min: 6, max: 999, duration: "3 min", obs: "Bom p/ muita gente" },
-  { id: 11, name: "Danger", type: "Habilidade", min: 0, max: 999, duration: "3,5 min", obs: "" },
-  { id: 12, name: "Defenda o seu pufe", type: "Sorte", min: 6, max: 10, duration: "3 min", obs: "" },
-  { id: 13, name: "Descubra a Senha", type: "Sorte / Conhec.", min: 8, max: 999, duration: "2 - 3 min", obs: "" },
-  { id: 14, name: "Divertidamente", type: "Habilidade", min: 9, max: 999, duration: "5 min", obs: "Bom p/ muita gente" },
-  { id: 15, name: "Dodge Ball", type: "Habilidade", min: 4, max: 8, duration: "3 - 4 min", obs: "" },
-  { id: 16, name: "Elefante Colorido", type: "Sorte", min: 0, max: 4, duration: "4 - 5 min", obs: "" },
-  { id: 17, name: "Elefante Colorido (Esferas)", type: "Habilidade", min: 7, max: 999, duration: "3 - 4 min", obs: "Bom p/ muita gente" },
-  { id: 18, name: "Fuja", type: "Habilidade", min: 0, max: 999, duration: "3 min", obs: "Bom p/ muita gente" },
-  { id: 19, name: "Fuja das Cores", type: "Habilidade", min: 5, max: 6, duration: "5 min", obs: "" },
-  { id: 20, name: "Fuja em Duplas", type: "Habilidade", min: 8, max: 8, duration: "4 - 5 min", obs: "Apenas 8 pessoas" },
-  { id: 21, name: "Fujamento", type: "Habilidade", min: 6, max: 999, duration: "4 min", obs: "Bom p/ muita gente" },
-  { id: 22, name: "Fujoller", type: "Habilidade", min: 5, max: 14, duration: "1,5 min", obs: "" },
-  { id: 23, name: "Ilhados", type: "Sorte", min: 5, max: 8, duration: "2,5 - 3,5 min", obs: "" },
-  { id: 24, name: "Ir até cor", type: "Sorte", min: 10, max: 999, duration: "2 - 3 min", obs: "" },
-  { id: 25, name: "Leilão", type: "Habilidade / Sorte", min: 7, max: 11, duration: "2 - 3 min", obs: "" },
-  { id: 26, name: "Massacre", type: "Habilidade", min: 0, max: 999, duration: "2,5 min", obs: "Bom p/ muita gente" },
-  { id: 27, name: "Nervosos", type: "Habilidade / Social", min: 8, max: 999, duration: "2,5 - 3,5 min", obs: "" },
-  { id: 28, name: "Pacman", type: "-", min: 6, max: 8, duration: "4 - 5 min", obs: "Sempre nº par" },
-  { id: 29, name: "Pegue a Lebre", type: "Habilidade", min: 7, max: 999, duration: "Variável", obs: "Elimina 1 a cada 30s" },
-  { id: 30, name: "Pegue o Drink", type: "Habilidade", min: 6, max: 999, duration: "4 min", obs: "Bom p/ muita gente" },
-  { id: 31, name: "Queimada", type: "Habilidade", min: 8, max: 999, duration: "3 - 4 min", obs: "" },
-  { id: 32, name: "Resta 1", type: "Habilidade", min: 4, max: 999, duration: "2,5 - 3,5 min", obs: "" },
-  { id: 33, name: "Sobrevivência", type: "Habilidade", min: 7, max: 999, duration: "1 min", obs: "" },
-  { id: 34, name: "Subir nas Portas", type: "Habilidade", min: 8, max: 16, duration: "1 - 2 min", obs: "Sempre nº par" },
-  { id: 35, name: "Tiro ao Alvo", type: "Sorte", min: 8, max: 999, duration: "1 - 2 min", obs: "" },
-  { id: 36, name: "Velocidade é Tudo", type: "Habilidade / Social", min: 8, max: 999, duration: "3,5 - 4,5 min", obs: "" },
-  { id: 37, name: "Verdadeiro ou Falso", type: "Conhecimento", min: 10, max: 999, duration: "5 - 6 min", obs: "" },
-  { id: 0, name: "Nenhuma Prova", type: "-", min: 0, max: 999, duration: "-", obs: "Apenas votação" },
+  { id: 1, name: "A Escolha", type: "Social / Sorte", min: 8, max: 18, duration: "2 - 3 min", obs: "", explanation: "Chegou a hora de A Escolha. Se for sorteado, você deve eliminar um brother secretamente clicando no piso verde dele ou nele. Quem sobrar, vence!" },
+  { id: 2, name: "Balão", type: "Sorte", min: 8, max: 999, duration: "1,5 min", obs: "", explanation: "Prova do Balão! Escolham uma cor e pisem nela. Vou estourar um balão: se sair a sua cor, você perde. O último a sobrar vence!" },
+  { id: 3, name: "Banzai", type: "Sorte", min: 0, max: 999, duration: "30s - 1 min", obs: "", explanation: "Hora de testar a sorte no Banzai! Entrem nos teleportes. Quem conseguir sentar na cadeira do outro lado vence a rodada!" },
+  { id: 4, name: "Batata Quente", type: "Habilidade", min: 7, max: 999, duration: "Variável", obs: "Elimina 1 a cada 30s", explanation: "Batata Quente! Uma pessoa começa com o fogo. Passem para outro clicando nele! Não segurem por mais de 5s e não terminem a rodada com o fogo!" },
+  { id: 5, name: "Cabo de Guerra", type: "Habilidade", min: 6, max: 999, duration: "30s", obs: "Por dupla ou indivíduo", explanation: "Cabo de Guerra! Pisem repetidamente no piso anel para puxar o objeto para o seu lado. Após 30s, quem tiver o objeto do seu lado vence!" },
+  { id: 6, name: "Caixas", type: "Habilidade", min: 5, max: 11, duration: "30s", obs: "", explanation: "Empurrem as Caixas! O objetivo é levar a caixa até o piso anel. Quem encaixar primeiro ganha (o wired desempata se for junto)!" },
+  { id: 7, name: "Céu ou Inferno", type: "Sorte", min: 6, max: 999, duration: "1 - 2 min", obs: "", explanation: "Céu ou Inferno? A sorte define seu destino. Sorteados para o Céu continuam, Inferno perde. Se todos perderem, eu refaço!" },
+  { id: 8, name: "Chão é Lava", type: "Sorte", min: 8, max: 999, duration: "3 - 5 min", obs: "", explanation: "O Chão é Lava! O piso vai sumir aleatoriamente. Não fiquem parados onde não tem chão! No final, corram para o piso verde para vencer." },
+  { id: 9, name: "Cliques", type: "Habilidade", min: 5, max: 7, duration: "1,5 min", obs: "", explanation: "Atenção na Prova dos Clicks! Vocês andarão para frente automaticamente. Cliquem rápido para voltar e evitem pisar no piso anel a todo custo!" },
+  { id: 10, name: "Cruzamento", type: "Habilidade", min: 6, max: 999, duration: "3 min", obs: "Bom p/ muita gente", explanation: "Atenção ao Cruzamento! Vocês têm exatos 30 segundos para atravessar a arena e chegar ao lado oposto. Quem não conseguir, está fora!" },
+  { id: 11, name: "Danger", type: "Habilidade", min: 0, max: 999, duration: "3,5 min", obs: "", explanation: "Cuidado, é Danger! Essas esferas não perseguem, mas mudam de direção ao bater. Quem for tocado por elas está eliminado!" },
+  { id: 12, name: "Defenda o seu pufe", type: "Sorte", min: 6, max: 10, duration: "3 min", obs: "", explanation: "Defenda o seu Pufe! Fiquem longe do piso anel. As cadeiras andam sozinhas para frente. Dica: você pode roubar a cadeira do colega para se salvar!" },
+  { id: 13, name: "Descubra a Senha", type: "Sorte / Conhec.", min: 8, max: 999, duration: "2 - 3 min", obs: "", explanation: "Vamos jogar Descubra a Senha! Tente adivinhar a resposta correta. O primeiro a acertar e sentar na cadeira vence!" },
+  { id: 14, name: "Divertidamente", type: "Habilidade", min: 9, max: 999, duration: "5 min", obs: "Bom p/ muita gente", explanation: "Bem-vindos ao Divertidamente! É simples: o primeiro que pisar no piso anel vence a rodada!" },
+  { id: 15, name: "Dodge Ball", type: "Habilidade", min: 4, max: 8, duration: "3 - 4 min", obs: "", explanation: "Hora do Dodge Ball! Dividam-se em dois times. Se o seu número for sorteado, corra para o centro! Quem sentar primeiro marca ponto para a equipe." },
+  { id: 16, name: "Elefante Colorido", type: "Sorte", min: 0, max: 4, duration: "4 - 5 min", obs: "", explanation: "O jogo é individual. Abra todas as portas o mais rápido possível. O melhor tempo vence!" },
+  { id: 17, name: "Elefante Colorido (Esferas)", type: "Habilidade", min: 7, max: 999, duration: "3 - 4 min", obs: "Bom p/ muita gente", explanation: "Fujam das esferas (2 a cada 30s) e corram para a cor sorteada. Quem não estiver na cor, perde!" },
+  { id: 18, name: "Fuja", type: "Habilidade", min: 0, max: 999, duration: "3 min", obs: "Bom p/ muita gente", explanation: "Bem-vindos ao Fuja! O objetivo é simples: desviem das esferas que nascem no centro. A cada 30 segundos, 3 novas esferas entram em jogo. Sobrevivam!" },
+  { id: 19, name: "Fuja das Cores", type: "Habilidade", min: 5, max: 6, duration: "5 min", obs: "", explanation: "Fuja das Cores! Vejam a cor do piso no meio e puxem a alavanca igual. Isso zera o tempo e adiciona uma esfera. Quem sobreviver mais tempo ganha!" },
+  { id: 20, name: "Fuja em Duplas", type: "Habilidade", min: 8, max: 8, duration: "4 - 5 min", obs: "Apenas 8 pessoas", explanation: "Fuja em Duplas! O objetivo é puxar as alavancas dos adversários. Quem acionar todas ganha. Atenção: as portas têm anti-aus de 10s!" },
+  { id: 21, name: "Fujamento", type: "Habilidade", min: 6, max: 999, duration: "4 min", obs: "Bom p/ muita gente", explanation: "Preparem-se para o Fujamento! O desafio é atravessar para o lado oposto em 50 segundos, mas desviando dos obstáculos. Boa sorte!" },
+  { id: 22, name: "Fujoller", type: "Habilidade", min: 5, max: 14, duration: "1,5 min", obs: "", explanation: "Bem-vindos ao Fujoller! Sobrevivam nos rollers enquanto esferas surgem nas pontas a cada 30s. Cuidado: os mármores atrás dos rollers são fatais!" },
+  { id: 23, name: "Ilhados", type: "Sorte", min: 5, max: 8, duration: "2,5 - 3,5 min", obs: "", explanation: "Vocês estão Ilhados! Sortearei alguém para andar X pisos. Cuidado: quem pisar fora do mármore perde" },
+  { id: 24, name: "Ir até cor", type: "Sorte", min: 10, max: 999, duration: "2 - 3 min", obs: "", explanation: "Atenção: Ir até a Cor! Vou sortear uma cor e vocês têm poucos segundos para subir nela. Quem não estiver na cor certa, perde!" },
+  { id: 25, name: "Leilão", type: "Habilidade / Sorte", min: 7, max: 11, duration: "2 - 3 min", obs: "", explanation: "Vocês são ladrões no banco! A cada rodada, terão 15s para escolher quantas barras de ouro roubar. Quem pegar MAIS barras na rodada fica pesado e a polícia pega (perde). Se empatar, o wired sorteia quem sai. Quem não for pego, acumula as barras no placar. No final, vence quem tiver mais ouro!" },
+  { id: 26, name: "Massacre", type: "Habilidade", min: 0, max: 999, duration: "2,5 min", obs: "Bom p/ muita gente", explanation: "Hora do Massacre! Fujam das esferas que surgem no centro. A arena vai encher rápido: mais 2 esferas a cada 30 segundos!" },
+  { id: 27, name: "Nervosos", type: "Habilidade / Social", min: 8, max: 999, duration: "2,5 - 3,5 min", obs: "", explanation: "Nervosos! O meio muda de cor. Só andem no VERDE. Se sentar no meio, elimina um. Quem andar fora do verde congela!" },
+  { id: 28, name: "Pacman", type: "-", min: 6, max: 8, duration: "4 - 5 min", obs: "Sempre nº par", explanation: "Hora do Pacman! Corram pela arena e coletem os pisos. Quem tiver coletado mais pisos que o adversário no final vence!" },
+  { id: 29, name: "Pegue a Lebre", type: "Habilidade", min: 7, max: 999, duration: "Variável", obs: "Elimina 1 a cada 30s", explanation: "" },
+  { id: 30, name: "Pegue o Drink", type: "Habilidade", min: 6, max: 999, duration: "4 min", obs: "Bom p/ muita gente", explanation: "Pegue o Drink! Corram até o outro lado, peguem a bebida e voltem para o início em menos de 50 segundos" },
+  { id: 31, name: "Queimada", type: "Habilidade", min: 8, max: 999, duration: "3 - 4 min", obs: "", explanation: "" },
+  { id: 32, name: "Resta 1", type: "Habilidade", min: 4, max: 999, duration: "2,5 - 3,5 min", obs: "", explanation: "O clássico Resta 1! Sobrevivam na arena sem pisar no fogo. O último a ficar de pé vence a prova." },
+  { id: 33, name: "Sobrevivência", type: "Habilidade", min: 7, max: 999, duration: "1 min", obs: "", explanation: "Prova de Sobrevivência! Aguentem 1 minuto. Pisem apenas quando estiver VERDE (Vermelho congela 1s). Ao final do tempo, sentem para vencer!" },
+  { id: 34, name: "Subir nas Portas", type: "Habilidade", min: 8, max: 16, duration: "1 - 2 min", obs: "Sempre nº par", explanation: "Subir nas Portas! Formem grupos. Abrirei uma porta aleatória na frente de cada grupo. Quem subir continua, quem ficar no chão dá tchau!" },
+  { id: 35, name: "Tiro ao Alvo", type: "Sorte", min: 8, max: 999, duration: "1 - 2 min", obs: "", explanation: "Tiro ao Alvo! O objetivo é chegar o mais próximo possível do piso verde. Quem ficar longe do alvo será eliminado!" },
+  { id: 36, name: "Velocidade é Tudo", type: "Habilidade / Social", min: 8, max: 999, duration: "3,5 - 4,5 min", obs: "", explanation: "Lembrem-se: Velocidade é Tudo! Quem sentar no Pufe Vermelho elimina 2 brothers. Quem pegar o Verde ganha imunidade na rodada!" },
+  { id: 37, name: "Verdadeiro ou Falso", type: "Conhecimento", min: 10, max: 999, duration: "5 - 6 min", obs: "", explanation: "Verdadeiro ou Falso? Vou fazer uma afirmação. Corram para o lado que acham ser a resposta correta. Quem errar, perde!" },
+  { id: 0, name: "Nenhuma Prova", type: "-", min: 0, max: 999, duration: "-", obs: "Apenas votação", explanation: "" },
 ].sort((a, b) => a.name.localeCompare(b.name));
 
 export const RoundManager: React.FC<RoundManagerProps> = ({ 
@@ -370,10 +371,41 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
     setCurrentVoteCount('');
   };
 
+  // --- AUTOMATION FEATURE: EXPLAIN CHALLENGE ---
+  const explainChallengeToHabbo = async () => {
+    if (!selectedChallengeData || !selectedChallengeData.explanation) {
+      alert("Esta prova não tem uma explicação cadastrada.");
+      return;
+    }
+
+    setIsAutomating(true);
+    try {
+      const response = await fetch('http://localhost:5000/type-long-text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: selectedChallengeData.explanation,
+          coords: clickCoords
+        }),
+      });
+
+      if (!response.ok) throw new Error('Falha na automação');
+      console.log("Explicação enviada");
+    } catch (err) {
+      console.error(err);
+      navigator.clipboard.writeText(selectedChallengeData.explanation);
+      alert("Copiado para a área de transferência (Servidor Python não respondeu).");
+    } finally {
+      setIsAutomating(false);
+    }
+  };
+
   // --- AUTOMATION FEATURE (PYTHON SERVER) ---
   const announceVotesToHabbo = async () => {
     // 1. Collect Other Votes (Not on Wall)
-    const votesList = otherVotes.map(ov => ({
+    const votesData = otherVotes.map(ov => ({
         name: getPlayerName(ov.playerId),
         count: ov.count
     }));
@@ -381,7 +413,7 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
     // 2. Collect House Nominees (On Wall)
     nominees.forEach(nom => {
         if ((nom.reason === 'Voto da Casa' || nom.reason === 'Voto da Casa (Desempate)') && nom.voteCount) {
-            votesList.push({
+            votesData.push({
                 name: getPlayerName(nom.playerId),
                 count: nom.voteCount
             });
@@ -389,14 +421,22 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
     });
 
     // 3. Sort Ascending (Least votes to Most votes)
-    votesList.sort((a, b) => a.count - b.count);
+    votesData.sort((a, b) => a.count - b.count);
 
-    if (votesList.length === 0) {
+    if (votesData.length === 0) {
         alert("Nenhum voto registrado para anunciar.");
         return;
     }
 
-    // 4. Trigger Python Automation Server
+    // 4. Format Strings (Intro + Singular/Plural Logic)
+    const linesToType = ["Contagem de votos:"]; // Header phrase
+    
+    votesData.forEach(v => {
+      const label = v.count === 1 ? 'voto' : 'votos';
+      linesToType.push(`${v.name}: ${v.count} ${label}`);
+    });
+
+    // 5. Trigger Python Automation Server
     setIsAutomating(true);
     try {
       const response = await fetch('http://localhost:5000/automate', {
@@ -405,7 +445,7 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          votes: votesList,
+          lines: linesToType, // Sending pre-formatted lines
           coords: clickCoords
         }),
       });
@@ -419,7 +459,7 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
       console.error("Erro na automação:", err);
       
       // Fallback: Copy to clipboard
-      const text = votesList.map(v => `${v.name}: ${v.count} votos`).join('\n');
+      const text = linesToType.join('\n');
       navigator.clipboard.writeText(text);
       alert("⚠️ Servidor Python não detectado (execute 'python automation_server.py').\n\nLista copiada para a área de transferência!");
     } finally {
@@ -538,17 +578,32 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
             )}
 
             <div className="space-y-2">
-              <select value={challengeName} onChange={e => setChallengeName(e.target.value)} className={`${selectClass} ${currentChallengeCount > 0 ? 'border-yellow-500 text-yellow-200 font-bold' : ''}`}>
-                <option value="">Selecione a Prova...</option>
-                {GAME_DATABASE.map(c => {
-                  const count = getChallengeUsageCount(c.name);
-                  return (
-                    <option key={c.id} value={c.name} className={count > 0 ? "font-bold text-yellow-500 bg-slate-900" : ""}>
-                      {count > 0 ? `⚠️ (${count}x) ${c.name}` : `${c.name}`}
-                    </option>
-                  );
-                })}
-              </select>
+              <div className="flex gap-2">
+                 <select value={challengeName} onChange={e => setChallengeName(e.target.value)} className={`${selectClass} ${currentChallengeCount > 0 ? 'border-yellow-500 text-yellow-200 font-bold' : ''}`}>
+                    <option value="">Selecione a Prova...</option>
+                    {GAME_DATABASE.map(c => {
+                    const count = getChallengeUsageCount(c.name);
+                    return (
+                        <option key={c.id} value={c.name} className={count > 0 ? "font-bold text-yellow-500 bg-slate-900" : ""}>
+                        {count > 0 ? `⚠️ (${count}x) ${c.name}` : `${c.name}`}
+                        </option>
+                    );
+                    })}
+                </select>
+                {/* Explain Challenge Button */}
+                <button 
+                  onClick={explainChallengeToHabbo}
+                  disabled={!selectedChallengeData?.explanation || isAutomating}
+                  className={`px-3 rounded border flex items-center justify-center transition-colors ${
+                      isAutomating 
+                        ? 'bg-yellow-500/20 border-yellow-500 text-yellow-200 cursor-wait' 
+                        : 'bg-indigo-500/20 border-indigo-500 text-indigo-300 hover:bg-indigo-500 hover:text-white'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={selectedChallengeData?.explanation ? "Explicar Prova (Digitar no Habbo)" : "Sem explicação cadastrada"}
+                >
+                  <BookOpen className="w-4 h-4" />
+                </button>
+              </div>
               
               {/* Selected Challenge Details */}
               {selectedChallengeData && selectedChallengeData.name !== "Nenhuma Prova" && selectedChallengeData.obs && (
