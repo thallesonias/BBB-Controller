@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Player, RoundLog, Nominee, OtherVote } from '../types';
 import { Button } from './Button';
-import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2 } from 'lucide-react';
+import { Crown, Shield, Skull, ArrowRight, Save, Activity, CheckSquare, Square, Ban, ThumbsUp, ThumbsDown, Trophy, AlertTriangle, Dice5, Megaphone, Sword, ClipboardList, Plus, Minus, Gavel, LogOut, User, Sparkles, Clock, Info, Share, MousePointer2, Crosshair, Settings2, PlayCircle } from 'lucide-react';
 
 interface RoundManagerProps {
   roundNumber: number;
@@ -104,6 +104,7 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
   // Automation Settings State
   const [clickCoords, setClickCoords] = useState({ x: 500, y: 500 });
   const [showCoordsSettings, setShowCoordsSettings] = useState(false);
+  const [isAutomating, setIsAutomating] = useState(false);
 
   // Suggestions State
   const [suggestions, setSuggestions] = useState<GameData[]>([]);
@@ -369,7 +370,7 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
     setCurrentVoteCount('');
   };
 
-  // --- AUTOMATION FEATURE ---
+  // --- AUTOMATION FEATURE (PYTHON SERVER) ---
   const announceVotesToHabbo = async () => {
     // 1. Collect Other Votes (Not on Wall)
     const votesList = otherVotes.map(ov => ({
@@ -395,19 +396,34 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
         return;
     }
 
-    // 4. Trigger Electron Automation
-    if (window.electronAPI) {
-        try {
-          await window.electronAPI.automateVotes(votesList, clickCoords);
-        } catch (err) {
-          console.error("Erro na automação:", err);
-          alert("Erro ao executar automação. Verifique se o Habbo está aberto.");
-        }
-    } else {
-        // Fallback: Copy to clipboard
-        const text = votesList.map(v => `${v.name}: ${v.count} votos`).join('\n');
-        navigator.clipboard.writeText(text);
-        alert("Modo Web: Lista copiada para a área de transferência!\n(A automação de clique/digitação requer o app Desktop/Electron)\n\n" + text);
+    // 4. Trigger Python Automation Server
+    setIsAutomating(true);
+    try {
+      const response = await fetch('http://localhost:5000/automate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          votes: votesList,
+          coords: clickCoords
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha na conexão com o servidor de automação');
+      }
+      
+      console.log("Comando enviado para o servidor Python");
+    } catch (err) {
+      console.error("Erro na automação:", err);
+      
+      // Fallback: Copy to clipboard
+      const text = votesList.map(v => `${v.name}: ${v.count} votos`).join('\n');
+      navigator.clipboard.writeText(text);
+      alert("⚠️ Servidor Python não detectado (execute 'python automation_server.py').\n\nLista copiada para a área de transferência!");
+    } finally {
+      setIsAutomating(false);
     }
   };
 
@@ -690,10 +706,12 @@ export const RoundManager: React.FC<RoundManagerProps> = ({
                       </button>
                       <button 
                         onClick={announceVotesToHabbo}
-                        className="text-[10px] flex items-center gap-1 text-indigo-400 hover:text-indigo-200 bg-indigo-500/10 hover:bg-indigo-500/30 px-2 py-0.5 rounded transition-colors"
-                        title="Digitar votos no Habbo (Desktop) ou Copiar"
+                        disabled={isAutomating}
+                        className={`text-[10px] flex items-center gap-1 px-2 py-0.5 rounded transition-colors ${isAutomating ? 'bg-yellow-500/20 text-yellow-300 cursor-wait' : 'text-indigo-400 hover:text-indigo-200 bg-indigo-500/10 hover:bg-indigo-500/30'}`}
+                        title="Digitar votos no Habbo via Python"
                       >
-                        <Share className="w-3 h-3" /> Revelar
+                        {isAutomating ? <Activity className="w-3 h-3 animate-spin" /> : <PlayCircle className="w-3 h-3" />}
+                        {isAutomating ? 'Rodando...' : 'Iniciar'}
                       </button>
                     </div>
                  </div>
